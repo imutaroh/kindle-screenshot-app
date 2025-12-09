@@ -1,0 +1,14 @@
+# Kindle 自動スクショアプリ - 依存パッケージ
+
+# GUI操作（スクショ・キーボード操作）
+pyautogui>=0.9.54
+
+# 画像処理（pyautoguiの依存）
+Pillow>=10.0.0
+
+# PDF生成（画質劣化なし）
+img2pdf>=0.5.1
+
+# Webフレームワーク（Phase 2）
+Flask>=3.0.0
+
