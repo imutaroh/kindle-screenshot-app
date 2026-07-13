@@ -1,0 +1,12 @@
+# ビルド成果物
+/kindlesnap
+
+# スクショ出力
+/output/
+
+# macOS
+.DS_Store
+
+# Claude Code worktree
+.claude/worktrees/
+.claude/tmp/
