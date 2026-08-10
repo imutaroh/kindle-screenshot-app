@@ -6,6 +6,9 @@ pyautogui>=0.9.54
 # 画像処理（pyautoguiの依存）
 Pillow>=10.0.0
 
+# 知覚ハッシュ（自動停止の精度向上 / pHash判定）
+ImageHash>=4.3.1
+
 # PDF生成（画質劣化なし）
 img2pdf>=0.5.1
 

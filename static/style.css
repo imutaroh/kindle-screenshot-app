@@ -1,3 +1,76 @@
+/* ==========================================================================
+   Kindle 自動スクショアプリ - スタイル
+   デザイントークン（CSS変数）+ ニュートラル配色 + アクセントカラー
+   ========================================================================== */
+
+:root {
+    /* カラー（ライト） */
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-muted: #eef0f3;
+    --text-primary: #1a1d24;
+    --text-secondary: #545b68;
+    --text-tertiary: #8b93a1;
+    --border-color: rgba(20, 22, 28, 0.09);
+    --border-strong: rgba(20, 22, 28, 0.18);
+
+    --accent: #6366f1;
+    --accent-hover: #5457d6;
+    --accent-soft: rgba(99, 102, 241, 0.12);
+    --accent-contrast: #ffffff;
+
+    --danger: #e5484d;
+    --danger-hover: #d33d42;
+    --danger-soft: rgba(229, 72, 77, 0.1);
+    --danger-contrast: #ffffff;
+
+    --success-dot: #22c55e;
+    --info-dot: #3b82f6;
+    --error-dot: #ef4444;
+
+    /* ログパネルはライト/ダーク共通のターミナル風配色 */
+    --log-bg: #14161c;
+    --log-border: rgba(255, 255, 255, 0.06);
+    --log-text-info: #7db3ff;
+    --log-text-success: #6ee7a8;
+    --log-text-error: #ff9494;
+    --log-text-error-bg: rgba(239, 68, 68, 0.14);
+    --log-text-default: #c7cad3;
+
+    --shadow-sm: 0 1px 2px rgba(16, 18, 24, 0.04);
+    --shadow-md: 0 6px 20px rgba(16, 18, 24, 0.06);
+
+    --radius-md: 14px;
+    --radius-sm: 8px;
+    --radius-pill: 999px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0f1115;
+        --surface: #181b22;
+        --surface-muted: #1f232c;
+        --text-primary: #e6e8ee;
+        --text-secondary: #a7adba;
+        --text-tertiary: #6b7280;
+        --border-color: rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.16);
+
+        --accent: #818cf8;
+        --accent-hover: #93a0fb;
+        --accent-soft: rgba(129, 140, 248, 0.16);
+        --accent-contrast: #12131a;
+
+        --danger: #f2696d;
+        --danger-hover: #f58589;
+        --danger-soft: rgba(242, 105, 109, 0.14);
+        --danger-contrast: #1c0b0c;
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.4);
+    }
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,11 +78,13 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
     min-height: 100vh;
     padding: 20px;
-    color: #333;
+    color: var(--text-primary);
+    line-height: 1.5;
 }
 
 .container {
@@ -17,52 +92,87 @@ body {
     margin: 0 auto;
 }
 
+/* ----- ヘッダー ----- */
 header {
-    background: white;
-    border-radius: 12px;
-    padding: 30px;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px 24px;
     margin-bottom: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 
 header h1 {
-    font-size: 28px;
-    color: #667eea;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
 }
 
 .status-badge {
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 14px;
-    font-weight: bold;
-    background: #e0e0e0;
-    color: #666;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px 6px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.status-badge::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+    flex-shrink: 0;
 }
 
 .status-badge.running {
-    background: #4caf50;
-    color: white;
-    animation: pulse 2s infinite;
+    color: var(--text-primary);
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.status-badge.running::before {
+    background: var(--success-dot);
+    animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
 .status-badge.completed {
-    background: #2196f3;
-    color: white;
+    color: var(--text-primary);
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.status-badge.completed::before {
+    background: var(--info-dot);
 }
 
 .status-badge.error {
-    background: #f44336;
-    color: white;
+    color: var(--text-primary);
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.1);
 }
 
-@keyframes pulse {
+.status-badge.error::before {
+    background: var(--error-dot);
+}
+
+@keyframes pulse-dot {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
+    50% { opacity: 0.35; }
 }
 
+/* ----- レイアウト ----- */
 main {
     display: flex;
     flex-direction: column;
@@ -70,22 +180,28 @@ main {
 }
 
 .card {
-    background: white;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 26px;
+    box-shadow: var(--shadow-sm);
 }
 
 .card h2 {
-    font-size: 20px;
-    margin-bottom: 20px;
-    color: #667eea;
-    border-bottom: 2px solid #667eea;
-    padding-bottom: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    color: var(--text-secondary);
+    letter-spacing: 0.01em;
 }
 
+/* ----- フォーム ----- */
 .form-group {
     margin-bottom: 20px;
+}
+
+.form-group:last-of-type {
+    margin-bottom: 0;
 }
 
 .form-row {
@@ -98,82 +214,248 @@ label {
     display: block;
     margin-bottom: 8px;
     font-weight: 600;
-    color: #555;
+    font-size: 14px;
+    color: var(--text-secondary);
 }
 
 input[type="text"],
 input[type="number"] {
     width: 100%;
-    padding: 12px;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 16px;
-    transition: border-color 0.3s;
+    padding: 11px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 input[type="text"]:focus,
 input[type="number"]:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+input[type="text"].input-error,
+input[type="number"].input-error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px var(--danger-soft);
 }
 
 small {
     display: block;
-    margin-top: 4px;
-    color: #888;
+    margin-top: 6px;
+    color: var(--text-tertiary);
     font-size: 12px;
 }
 
+/* ----- チェックボックス（トグルスイッチ） ----- */
 .checkbox-label {
     display: flex;
     align-items: center;
+    gap: 10px;
     cursor: pointer;
-    font-weight: normal;
+    font-weight: 400;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 0;
 }
 
 .checkbox-label input[type="checkbox"] {
-    width: auto;
-    margin-right: 8px;
-    cursor: pointer;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
+.switch-track {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+    background: var(--border-strong);
+    border-radius: var(--radius-pill);
+    transition: background 0.15s ease;
+}
+
+.switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s ease;
+}
+
+.checkbox-label input:checked + .switch-track {
+    background: var(--accent);
+}
+
+.checkbox-label input:checked + .switch-track .switch-thumb {
+    transform: translateX(18px);
+}
+
+.checkbox-label input:focus-visible + .switch-track {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.checkbox-label input:disabled + .switch-track {
+    opacity: 0.5;
+}
+
+/* ----- ラジオ（セグメントコントロール） ----- */
+.radio-group {
+    display: flex;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.radio-label {
+    flex: 1;
+    display: flex;
+    position: relative;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    padding: 0;
+    margin-bottom: 0;
+    font-weight: 400;
+}
+
+.radio-label input[type="radio"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.radio-label span {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.radio-label input:checked + span {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 600;
+}
+
+.radio-label input:focus-visible + span {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.radio-label input:disabled + span {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ----- ボタン ----- */
 .button-group {
     display: flex;
     gap: 10px;
-    margin-top: 20px;
+    margin-top: 24px;
 }
 
 .btn {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
+    padding: 12px 20px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     flex: 1;
 }
 
+.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 .btn-primary {
-    background: #667eea;
-    color: white;
+    background: var(--accent);
+    color: var(--accent-contrast);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: #5568d3;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    background: var(--accent-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary {
+    background: var(--surface-muted);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
 }
 
 .btn-danger {
-    background: #f44336;
-    color: white;
+    background: var(--danger);
+    color: var(--danger-contrast);
 }
 
 .btn-danger:hover:not(:disabled) {
-    background: #d32f2f;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(244, 67, 54, 0.3);
+    background: var(--danger-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-danger.btn-confirm {
+    background: var(--danger-hover);
+    box-shadow: 0 0 0 2px var(--danger-soft), var(--shadow-sm);
+    animation: btn-confirm-pulse 1s ease-in-out infinite;
+}
+
+.btn-danger.btn-confirm:hover:not(:disabled) {
+    background: var(--danger-hover);
+}
+
+@keyframes btn-confirm-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
 }
 
 .btn:disabled {
@@ -181,105 +463,270 @@ small {
     cursor: not-allowed;
 }
 
+/* ----- 進捗表示 ----- */
 .progress-info {
     margin-bottom: 20px;
 }
 
 .progress-bar-container {
     width: 100%;
-    height: 30px;
-    background: #e0e0e0;
-    border-radius: 15px;
+    height: 10px;
+    background: var(--surface-muted);
+    border-radius: var(--radius-pill);
     overflow: hidden;
     margin-bottom: 10px;
 }
 
 .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    background: var(--accent);
     width: 0%;
-    transition: width 0.3s;
-    border-radius: 15px;
+    transition: width 0.3s ease;
+    border-radius: var(--radius-pill);
+}
+
+/* 総ページ数が不明な間は「動作中」を示す流れるバー */
+.progress-bar.indeterminate {
+    background: repeating-linear-gradient(
+        45deg,
+        var(--accent) 0px,
+        var(--accent) 14px,
+        var(--accent-hover) 14px,
+        var(--accent-hover) 28px
+    );
+    background-size: 200% 100%;
+    animation: indeterminate-flow 1.2s linear infinite;
+}
+
+@keyframes indeterminate-flow {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 0; }
 }
 
 .progress-text {
     display: flex;
     justify-content: space-between;
     font-weight: 600;
-    color: #555;
+    font-size: 13px;
+    color: var(--text-secondary);
 }
 
 .message-box {
-    background: #f5f5f5;
-    border-left: 4px solid #667eea;
-    padding: 15px;
-    border-radius: 4px;
+    background: var(--surface-muted);
+    border-left: 3px solid var(--accent);
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
     margin-top: 15px;
 }
 
 .message-box p {
     margin: 0;
-    color: #555;
-}
-
-.log-container {
-    max-height: 300px;
-    overflow-y: auto;
-    background: #f9f9f9;
-    padding: 15px;
-    border-radius: 8px;
-    font-family: 'Courier New', monospace;
+    color: var(--text-secondary);
     font-size: 14px;
 }
 
+/* ----- ログ（ライト/ダーク共通のターミナル風） ----- */
+.log-container {
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--log-bg);
+    border: 1px solid var(--log-border);
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+}
+
 .log-entry {
-    margin: 5px 0;
-    padding: 5px;
+    margin: 4px 0;
+    padding: 3px 6px;
     border-radius: 4px;
+    color: var(--log-text-default);
 }
 
 .log-entry.info {
-    color: #2196f3;
+    color: var(--log-text-info);
 }
 
 .log-entry.success {
-    color: #4caf50;
+    color: var(--log-text-success);
 }
 
 .log-entry.error {
-    color: #f44336;
-    background: #ffebee;
+    color: var(--log-text-error);
+    background: var(--log-text-error-bg);
 }
 
+/* ----- フッター ----- */
 footer {
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
     margin-top: 20px;
     text-align: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
 }
 
 footer p {
-    margin: 5px 0;
-    color: #666;
+    margin: 4px 0;
+    color: var(--text-tertiary);
+    font-size: 13px;
 }
 
 footer .warning {
-    color: #f44336;
-    font-weight: 600;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
-/* レスポンシブ */
+.hotcorner-help {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(217, 119, 6, 0.08);
+    border-left: 3px solid rgba(217, 119, 6, 0.5);
+    border-radius: var(--radius-sm);
+    text-align: left;
+    display: inline-block;
+}
+
+.hotcorner-help p {
+    margin: 4px 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.hotcorner-help strong {
+    color: var(--text-primary);
+}
+
+/* ----- トースト通知 ----- */
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    pointer-events: auto;
+    min-width: 240px;
+    max-width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    padding: 12px 16px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--text-primary);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast.hide {
+    opacity: 0;
+    transform: translateY(8px);
+}
+
+.toast.info {
+    border-left-color: var(--accent);
+}
+
+.toast.success {
+    border-left-color: var(--success-dot);
+}
+
+.toast.error {
+    border-left-color: var(--danger);
+}
+
+/* ----- レスポンシブ ----- */
 @media (max-width: 768px) {
     .form-row {
         grid-template-columns: 1fr;
     }
-    
+
+    .radio-group {
+        flex-direction: column;
+    }
+
     header {
         flex-direction: column;
         gap: 15px;
         text-align: center;
     }
+
+    .toast-container {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+    }
+
+    .toast {
+        max-width: none;
+        min-width: 0;
+        width: 100%;
+    }
 }
 
+/* ----- リーダーへのリンク ----- */
+.reader-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.reader-link:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.reader-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ----- モーション低減 ----- */
+@media (prefers-reduced-motion: reduce) {
+    .btn {
+        transition: none;
+    }
+
+    .btn:hover:not(:disabled) {
+        transform: none;
+    }
+
+    .status-badge.running::before {
+        animation: none;
+    }
+
+    .btn-danger.btn-confirm {
+        animation: none;
+    }
+
+    .toast {
+        transition: none;
+    }
+}

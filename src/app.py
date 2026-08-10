@@ -9,8 +9,9 @@ import time
 from pathlib import Path
 
 from src import config
-from src.screenshot import capture_all_pages
+from src.screenshot import capture_all_pages, CaptureCancelled
 from src.pdf_generator import create_pdfs_from_directory, delete_png_files
+from src.utils import create_unique_output_dir
 
 
 def get_book_name() -> str:
@@ -34,19 +35,15 @@ def get_book_name() -> str:
 def create_output_directory(book_name: str) -> Path:
     """
     出力ディレクトリを作成する
-    
+    （同名フォルダに既存ファイルがある場合は連番付きの別フォルダになる）
+
     Args:
         book_name: 本の名前
-    
+
     Returns:
         Path: 作成したディレクトリのパス
     """
-    # ファイル名に使えない文字を置換
-    safe_name = book_name.replace("/", "_").replace("\\", "_").replace(":", "_")
-    
-    output_dir = Path(config.OUTPUT_DIR) / safe_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
+    output_dir = create_unique_output_dir(book_name)
     print(f"\n📁 保存先: {output_dir.absolute()}")
     return output_dir
 
@@ -64,19 +61,31 @@ def get_settings() -> dict:
     print(f"  - 開始待機時間: {config.START_DELAY}秒")
     print(f"  - PDF結合枚数: {config.PDF_PAGES_PER_FILE}枚/ファイル")
     print(f"  - 最大ページ数: {'無制限' if config.MAX_PAGES == 0 else config.MAX_PAGES}")
+    print(f"  - ページめくり方向: {'← 左（日本語の本）' if config.PAGE_DIRECTION == 'left' else '→ 右（英語の本）'}")
     print("-" * 50)
-    
+
     # 最大ページ数の入力
     max_pages_input = input("\n最大ページ数を入力（Enterで無制限）: ").strip()
     max_pages = int(max_pages_input) if max_pages_input.isdigit() else 0
-    
+
     # PDF結合枚数の入力
     pdf_pages_input = input(f"PDF結合枚数を入力（Enterで{config.PDF_PAGES_PER_FILE}枚）: ").strip()
     pdf_pages = int(pdf_pages_input) if pdf_pages_input.isdigit() else config.PDF_PAGES_PER_FILE
-    
+
+    # ページめくり方向の入力
+    default_dir_label = "L" if config.PAGE_DIRECTION == "left" else "R"
+    dir_input = input(f"ページめくり方向 [L=左(日本語) / R=右(英語)]（Enterで{default_dir_label}）: ").strip().lower()
+    if dir_input == "l":
+        direction = "left"
+    elif dir_input == "r":
+        direction = "right"
+    else:
+        direction = config.PAGE_DIRECTION
+
     return {
         "max_pages": max_pages,
         "pdf_pages_per_file": pdf_pages,
+        "direction": direction,
     }
 
 
@@ -117,10 +126,16 @@ def main():
         print("📸 スクリーンショット取得中...")
         print("-" * 50)
         
-        captured_pages = capture_all_pages(
-            output_dir=output_dir,
-            max_pages=settings["max_pages"]
-        )
+        try:
+            captured_pages = capture_all_pages(
+                output_dir=output_dir,
+                max_pages=settings["max_pages"],
+                direction=settings["direction"],
+            )
+        except CaptureCancelled as e:
+            print(f"\n🖱️  キャンセルされました: {e}")
+            print("   PDF化はスキップします（PNGファイルはそのまま残ります）。")
+            sys.exit(0)
         
         print("-" * 50)
         print(f"✅ {captured_pages}ページのスクリーンショットを保存しました。")

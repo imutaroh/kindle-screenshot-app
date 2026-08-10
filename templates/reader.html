@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>読書ビューア - Kindle 自動スクショアプリ</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='reader.css') }}">
+</head>
+<body class="reader-body">
+    <div class="container reader-container">
+        <header>
+            <a class="back-link" href="/">← 戻る</a>
+            <h1 id="readerTitle">📖 読書ビューア</h1>
+        </header>
+
+        <main>
+            <!-- 本棚ビュー -->
+            <section class="card" id="shelfView">
+                <h2>📚 本棚</h2>
+                <div id="shelfLoading" class="shelf-loading">読み込み中...</div>
+                <div id="shelfError" class="shelf-error" style="display: none;"></div>
+                <div id="shelfEmpty" class="shelf-empty" style="display: none;">
+                    本が見つかりませんでした。output/ フォルダにPDFがあるか確認してください。
+                </div>
+                <div class="book-grid" id="bookGrid"></div>
+            </section>
+
+            <!-- ビューアビュー（初期非表示） -->
+            <section class="viewer-view" id="viewerView" style="display: none;">
+                <div class="viewer-toolbar" id="viewerToolbar">
+                    <div class="toolbar-group toolbar-title">
+                        <span id="viewerBookTitle" class="viewer-book-title"></span>
+                    </div>
+                    <div class="toolbar-group toolbar-nav">
+                        <button type="button" id="prevPageBtn" class="toolbar-btn" title="前へ" aria-label="前のページ">◀</button>
+                        <input type="range" id="pageSlider" class="page-slider" min="1" max="1" value="1" aria-label="ページ位置">
+                        <button type="button" id="nextPageBtn" class="toolbar-btn" title="次へ" aria-label="次のページ">▶</button>
+                    </div>
+                    <div class="toolbar-group toolbar-info">
+                        <span id="pageIndicator" class="page-indicator">- / -</span>
+                        <span id="partIndicator" class="part-indicator"></span>
+                    </div>
+                    <div class="toolbar-group toolbar-settings">
+                        <button type="button" id="spreadToggleBtn" class="toolbar-btn toolbar-toggle" title="見開き/単ページ切り替え">見開き</button>
+                        <button type="button" id="directionToggleBtn" class="toolbar-btn toolbar-toggle" title="綴じ方向切り替え">右綴じ</button>
+                        <button type="button" id="fitToggleBtn" class="toolbar-btn toolbar-toggle" title="フィット方式切り替え">高さフィット</button>
+                        <button type="button" id="marginCropToggleBtn" class="toolbar-btn toolbar-toggle" title="ページ外周の余白を自動カット（デフォルトON）">余白カット</button>
+                        <button type="button" id="zoomOutBtn" class="toolbar-btn" title="縮小" aria-label="縮小">－</button>
+                        <span id="zoomIndicator" class="zoom-indicator">100%</span>
+                        <button type="button" id="zoomInBtn" class="toolbar-btn" title="拡大" aria-label="拡大">＋</button>
+                    </div>
+                    <div class="toolbar-group toolbar-close">
+                        <button type="button" id="closeViewerBtn" class="toolbar-btn" title="本棚に戻る（Esc）">✕ 本棚へ</button>
+                    </div>
+                </div>
+
+                <div class="viewer-stage" id="viewerStage">
+                    <div class="click-zone click-zone-left" id="clickZoneLeft"></div>
+                    <div class="click-zone click-zone-right" id="clickZoneRight"></div>
+
+                    <div class="page-surface" id="pageSurface">
+                        <div class="page-loading" id="pageLoading" style="display: none;">
+                            <div class="spinner" aria-hidden="true"></div>
+                            <p>読み込み中...</p>
+                        </div>
+                        <div class="page-error" id="pageError" style="display: none;"></div>
+                        <canvas id="pageCanvasLeft" class="page-canvas"></canvas>
+                        <canvas id="pageCanvasRight" class="page-canvas"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='reader.js') }}"></script>
+</body>
+</html>

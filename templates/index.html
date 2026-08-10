@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kindle 自動スクショアプリ</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>📚 Kindle 自動スクショアプリ</h1>
+            <a class="reader-link" href="/reader">📖 リーダー</a>
             <div class="status-badge" id="statusBadge">待機中</div>
         </header>
 
@@ -27,20 +29,35 @@
                     <div class="form-group">
                         <label for="maxPages">最大ページ数</label>
                         <input type="number" id="maxPages" min="0" value="0" placeholder="0 = 無制限">
-                        <small>0を入力すると無制限</small>
+                        <small>0 = 無制限（推奨。自動停止 or 左上カーソルで終了）</small>
                     </div>
 
                     <div class="form-group">
                         <label for="pdfPagesPerFile">PDF結合枚数</label>
-                        <input type="number" id="pdfPagesPerFile" min="1" value="100">
+                        <input type="number" id="pdfPagesPerFile" min="1" value="50">
                         <small>1つのPDFに含める画像枚数</small>
                     </div>
                 </div>
 
                 <div class="form-group">
+                    <label>ページめくり方向</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="direction" value="left" checked>
+                            <span>← 左にめくる（日本語の本・縦書き右綴じ）</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="direction" value="right">
+                            <span>→ 右にめくる（英語の本・横書き左綴じ）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="autoDeletePng">
-                        <span>PDF作成後にPNGを自動削除</span>
+                        <input type="checkbox" id="autoDeletePng" checked>
+                        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                        <span class="switch-text">PDF作成後にPNGを自動削除</span>
                     </label>
                 </div>
 
@@ -50,6 +67,9 @@
                     </button>
                     <button id="stopButton" class="btn btn-danger" onclick="stopCapture()" style="display: none;">
                         ⏹️ 停止
+                    </button>
+                    <button id="openFolderButton" class="btn btn-secondary" onclick="openFolder()" style="display: none;">
+                        📂 保存先を開く
                     </button>
                 </div>
             </section>
@@ -82,9 +102,16 @@
             </section>
         </main>
 
+        <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
         <footer>
             <p>Kindle 自動スクショアプリ v1.0</p>
-            <p class="warning">⚠️ 実行前にKindleをフルスクリーンで表示してください</p>
+            <p class="warning">💡 実行開始するとKindleを自動で前面に表示します（事前にKindleを起動し、フルスクリーンにしておくのがおすすめ）</p>
+            <div class="hotcorner-help">
+                <p>🖱️ <strong>実行中の手動制御（ホットコーナー）</strong></p>
+                <p>画面の<strong>左上角</strong>にマウスを移動 → 取得済みPNGでPDF化して終了</p>
+                <p>画面の<strong>右上角</strong>にマウスを移動 → キャンセル（PDF化せず終了）</p>
+            </div>
         </footer>
     </div>
 
