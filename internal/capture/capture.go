@@ -6,6 +6,7 @@
 package capture
 
 import (
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -91,4 +92,75 @@ func runOsascript(script string) error {
 		return fmt.Errorf("osascript: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// runJXA は JXA（JavaScript for Automation）を1つ実行し、標準出力の文字列を返す。
+// AppleScript ではなく JXA を使うのは、Cocoa（NSEvent / NSScreen）の値を
+// JSON.stringify でそのまま取り出せて構文が単純になるため。
+func runJXA(script string) (string, error) {
+	out, err := exec.Command("osascript", "-l", "JavaScript", "-e", script).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("osascript(JXA): %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// mousePositionScript は現在のマウス座標を取得する JXA。
+// NSEvent.mouseLocation は「主画面の左下」を原点とする Cocoa 座標系（Y軸が上向き）を返すため、
+// 主画面の高さから引いて左上原点（Y軸が下向き）に変換する。
+// これは Python 版が使っていた pyautogui の座標系（左上原点）に合わせるため。
+// ホットコーナー判定（左上角・右上角）はこの座標系を前提にしており、変換を誤ると誤判定に直結する。
+const mousePositionScript = `
+ObjC.import("Cocoa");
+const p = $.NSEvent.mouseLocation;
+const screenHeight = $.NSScreen.mainScreen.frame.size.height;
+JSON.stringify({x: p.x, y: screenHeight - p.y});
+`
+
+// screenSizeScript は主画面のサイズ（ポイント単位）を取得する JXA。
+const screenSizeScript = `
+ObjC.import("Cocoa");
+const f = $.NSScreen.mainScreen.frame;
+JSON.stringify({w: f.size.width, h: f.size.height});
+`
+
+// jxaPoint は mousePositionScript の JSON 出力を受けるための型。
+type jxaPoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// jxaSize は screenSizeScript の JSON 出力を受けるための型。
+type jxaSize struct {
+	W float64 `json:"w"`
+	H float64 `json:"h"`
+}
+
+// MousePosition は現在のマウスカーソル座標を左上原点で返す（単位: ポイント）。
+// ホットコーナー（画面の角にマウスを置いてページ送りを止める等）の判定に使う想定で、
+// ページ送りごとにポーリングされてもよいよう1回あたり数十〜100ms程度で完了する。
+// アクセシビリティ/画面収録権限は不要（マウス位置の取得は特別な許可を要求しない）。
+func MousePosition() (x, y float64, err error) {
+	out, err := runJXA(mousePositionScript)
+	if err != nil {
+		return 0, 0, fmt.Errorf("マウス座標の取得に失敗しました: %w", err)
+	}
+	var p jxaPoint
+	if err := json.Unmarshal([]byte(out), &p); err != nil {
+		return 0, 0, fmt.Errorf("マウス座標のJSON解析に失敗しました: %w (出力: %s)", err, out)
+	}
+	return p.X, p.Y, nil
+}
+
+// ScreenSize は主画面のサイズ（幅・高さ、単位: ポイント）を返す。
+func ScreenSize() (w, h float64, err error) {
+	out, err := runJXA(screenSizeScript)
+	if err != nil {
+		return 0, 0, fmt.Errorf("画面サイズの取得に失敗しました: %w", err)
+	}
+	var s jxaSize
+	if err := json.Unmarshal([]byte(out), &s); err != nil {
+		return 0, 0, fmt.Errorf("画面サイズのJSON解析に失敗しました: %w (出力: %s)", err, out)
+	}
+	return s.W, s.H, nil
 }
