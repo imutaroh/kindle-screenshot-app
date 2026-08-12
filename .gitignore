@@ -51,3 +51,11 @@ output/
 .env
 .env.local
 
+# Go ビルド成果物
+/kindlesnap
+/kindleweb
+
+# Claude Code worktree
+.claude/worktrees/
+.claude/tmp/
+

@@ -1,86 +1,89 @@
-# Kindle 自動スクショアプリ
+# kindle-screenshot-go
 
-Kindle for Mac の全ページを自動でスクリーンショット取得し、PDFに結合するツール。Web UI 付き。
+Kindle for Mac の全ページを自動スクリーンショットする CLI（Go 学習プロジェクト）。
+Python 版 [kindle-screenshot-app](../kindle-screenshot-app) の Go 移植。
 
-## クイックスタート（推奨：ダブルクリック起動）
+## 設計方針
 
-1. **Finder** で `start.command` を**ダブルクリック**
-   - 初回は仮想環境の作成と依存パッケージのインストールが走るので少し待つ
-   - 完了するとブラウザが自動で開く（http://localhost:5001）
-2. **macOSの権限を許可**（初回のみ。次の2つは「システム設定 > プライバシーとセキュリティ」）
-   - **画面収録**: ターミナル（または Python）にチェック
-   - **アクセシビリティ**: ターミナル（または Python）にチェック
-3. **Kindle for Mac で本を開いておく**（フルスクリーン推奨）
-4. ブラウザのフォームに**本の名前**を入力 → **🚀 実行開始**
-   - Kindle は自動で前面に表示される（5秒のカウントダウン後に開始）
-5. 自動でスクショ取得 → PDF結合まで実行。完了後は **📂 保存先を開く** ボタンで Finder が開く
+- **pure Go**（CGo なし）。macOS 操作は標準コマンドに逃がす
+  - スクショ: `screencapture -x -m`（メインディスプレイのみ・無音）
+  - ページ送り・Kindle前面化: `osascript`（AppleScript）
+- `go build` 一発で単一バイナリ。venv も依存セットアップも不要
 
-> 同じ本の名前で再実行した場合、既存フォルダには上書きせず `本の名前_2` のように連番フォルダが作られる。
+## フェーズ計画
 
-> 終了するときは、起動したターミナルウィンドウで `Ctrl + C`、もしくはウィンドウを閉じる。
+- [x] **① CLI**: スクショ → ページ送り → pHash 自動停止（このリポジトリの現状）
+- [x] **② PDF結合**: 自前の最小PDFライター（`internal/pdf`）で PNG → PDF
+- [x] **③ Web UI**: `net/http` + `embed` で Python 版の Web UI を移植
 
-### `start.command` がダブルクリックで開けないとき
+## 使い方
 
-Finder で `start.command` を**右クリック → 開く**（macOS のセキュリティ警告を許可）。一度開けば次回からはダブルクリックで起動できる。
-
-## 使い方（ターミナル版・上級者向け）
-
-シンプルに対話形式で動かしたい場合：
+### CLI（kindlesnap）
 
 ```bash
-source venv/bin/activate
-python app.py
+go build -o kindlesnap ./cmd/kindlesnap
+./kindlesnap -book "本の名前"            # 日本語の本（左めくり）
+./kindlesnap -book "Some Book" -dir right  # 英語の本（右めくり）
 ```
 
-## 設定
+実行すると Kindle を自動で前面に出し、5秒カウントダウン後にキャプチャ開始。
+最終ページで同じ画面が2回続くと自動停止する。途中で止めるには `Ctrl+C`。
 
-`src/config.py` で以下を変更可能：
+主なフラグは `./kindlesnap -h` を参照。
 
-- `PAGE_WAIT_TIME`: ページ送り後の待機秒数（デフォルト: 0.5秒）
-- `INITIAL_PAGE_WAIT_TIME`: 最初の数ページの待機秒数（初期読み込み用、デフォルト: 2.0秒）
-- `START_DELAY`: 実行開始前の待機秒数（デフォルト: 5秒）
-- `PDF_PAGES_PER_FILE`: 1つのPDFに含める画像枚数（デフォルト: 100枚）
-- `AUTO_STOP_ON_DUPLICATE`: 同じページが連続したら自動停止（デフォルト: True）
+### Web UI（kindleweb）
 
-## トラブルシューティング
-
-### スクリーンショットが取得できない / ページが送られない
-
-- 「画面収録」「アクセシビリティ」の権限を再確認（ターミナル / Python の両方）
-- Kindle がフルスクリーンで**前面**にあるか確認
-- アニメーションが遅い場合は `src/config.py` の `PAGE_WAIT_TIME` を上げる
-
-### ブラウザが自動で開かない
-
-手動で http://localhost:5001 にアクセス。
-
-### ポート 5001 が使われている
-
-別ポートで起動：
+Python 版と同じ Web UI 体験を、依存ゼロの単一バイナリで提供する。
 
 ```bash
-PORT=5002 python server.py
+go run ./cmd/kindleweb
+# または
+go build -o kindleweb ./cmd/kindleweb
+./kindleweb
 ```
 
-## ファイル構成
+起動したら `http://localhost:5001` をブラウザで開く。本の名前・最大ページ数・PDF結合枚数・
+ページめくり方向・PNG自動削除を画面から設定して実行でき、`/reader` では生成したPDFをその場で読める。
+
+フラグ:
+
+- `-port`: 待受ポート（デフォルト `5001`。環境変数 `PORT` があればそれを既定値として使う。`-port` の明示指定が最優先）
+- `-out`: 本の出力先ルートフォルダ（デフォルト `output`。`/api/books` や `/reader` の一覧・配信もこのフォルダ配下を対象にする）
+
+```bash
+./kindleweb -port 8080 -out ~/Documents/kindle-books
+```
+
+実行中はホットコーナーで手動制御できる（画面**左上角**にマウス移動＝取得済み分でPDF化して終了、
+**右上角**＝キャンセル）。マルチディスプレイ環境では `NSScreen.mainScreen` 基準の座標になるため、
+Kindle を副ディスプレイに出している場合は角判定がずれることがある。
+
+## 必要な権限（初回のみ）
+
+「システム設定 > プライバシーとセキュリティ」で、実行するターミナルに以下を許可:
+
+- **画面収録**（screencapture 用）
+- **アクセシビリティ**（ページ送りのキー送信用）
+
+`kindlesnap`（CLI）・`kindleweb`（Web UI）のどちらも同じ権限が必要。
+
+## テスト
+
+```bash
+go test ./...                                        # ユニットテスト
+KINDLESNAP_SMOKE=1 go test ./internal/capture/ -v    # 実際に画面をキャプチャするスモークテスト
+```
+
+## 構成
 
 ```
-kindle-screenshot-app/
-├── start.command           # ダブルクリック起動スクリプト（Mac）
-├── server.py               # Web UI 版エントリーポイント
-├── app.py                  # ターミナル版エントリーポイント
-├── requirements.txt
-├── src/
-│   ├── server.py           # Flask サーバ
-│   ├── app.py              # ターミナル版本体
-│   ├── screenshot.py       # スクショ・ページ送り
-│   ├── pdf_generator.py    # PDF結合
-│   ├── utils.py            # 共通処理（出力フォルダの連番作成など）
-│   └── config.py           # 設定値
-├── templates/index.html    # Web UI
-├── static/
-│   ├── script.js           # フロントエンドロジック
-│   └── style.css
-├── output/                 # 出力先（本ごとのフォルダ）
-└── docs/
+cmd/kindlesnap/     # CLI エントリーポイント（フラグ・メインループ・シグナル処理）
+cmd/kindleweb/      # Web UI サーバーのエントリーポイント（-port / -out フラグ）
+internal/capture/   # screencapture / osascript のラッパー（マウス座標・画面サイズ取得も含む）
+internal/dedupe/    # pHash による同一ページ判定（自動停止用）
+internal/output/    # 出力フォルダの連番作成（上書き防止）
+internal/pdf/       # 連番PNG → PDF結合（自前の最小PDFライター）
+internal/session/   # Web UI 用キャプチャワーカー（状態管理・ホットコーナー・進捗）
+internal/server/    # Web UI の HTTP ルーティング（net/http のみ、フレームワーク不使用）
+web/                # Web UI の静的資産（HTML/CSS/JS）を go:embed でバイナリに同梱
 ```
