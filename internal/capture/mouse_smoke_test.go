@@ -16,19 +16,14 @@ func TestMouseAndScreenSmoke(t *testing.T) {
 		t.Skip("KINDLESNAP_SMOKE=1 のときだけ実行（実際に osascript を叩くため）")
 	}
 
-	w, h, err := ScreenSize()
+	x, y, w, h, err := CornerState()
 	if err != nil {
-		t.Fatalf("ScreenSize: %v", err)
+		t.Fatalf("CornerState: %v", err)
 	}
 	if w <= 0 || h <= 0 {
 		t.Fatalf("画面サイズが不正です: w=%v h=%v", w, h)
 	}
 	t.Logf("screen size = %vx%v", w, h)
-
-	x, y, err := MousePosition()
-	if err != nil {
-		t.Fatalf("MousePosition: %v", err)
-	}
 	t.Logf("mouse position (top-left origin) = (%v, %v)", x, y)
 
 	// シングルディスプレイなら主画面の範囲内に収まるはず。

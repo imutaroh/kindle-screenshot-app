@@ -38,6 +38,20 @@ const (
 	DefaultDuplicateThreshold  = 5
 	DefaultDuplicateCheckCount = 2
 
+	// 以下4つは適応待機（画面の変化を検知してから撮る）のパラメータ。
+	// ページ送り直後、スクショが「前ページと変わった（DefaultDuplicateThreshold超）」かつ
+	// 「直前のポーリングと同じ＝描画が止まって安定した（DefaultStableThreshold以下）」と
+	// 判定できるまで DefaultPollInterval 間隔でポーリングする（internal/session/worker.go の
+	// captureSettled）。設定はUIに出さない固定パラメータ。
+	DefaultPollInterval = 150 * time.Millisecond
+	// DefaultStableThreshold は「直前のポーリングと同じ画像」とみなす pHash ハミング距離の上限。
+	DefaultStableThreshold = 2
+	// DefaultSettleTimeout は通常ページの安定待ちタイムアウト。これに達したら最後に撮った1枚を採用する。
+	DefaultSettleTimeout = 3 * time.Second
+	// DefaultInitialSettleTimeout は最初の DefaultInitialPagesCount ページの安定待ちタイムアウト
+	// （Kindle の初期読み込みが遅いため長めに取る）。
+	DefaultInitialSettleTimeout = 6 * time.Second
+
 	// DefaultAutoDeletePNG はPDF作成後にPNGを自動削除する設定の初期値。
 	DefaultAutoDeletePNG = true
 
