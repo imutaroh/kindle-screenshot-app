@@ -1,0 +1,365 @@
+/* ==========================================================================
+   読書ビューア（PDFリーダー） - スタイル
+   style.css のデザイントークンを再利用する。表示専用UI。
+   ========================================================================== */
+
+.reader-body {
+    padding: 20px;
+}
+
+.reader-container {
+    max-width: 1100px;
+}
+
+.back-link {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.back-link:hover {
+    background: var(--surface-muted);
+    color: var(--text-primary);
+}
+
+/* ----- 本棚ビュー ----- */
+.shelf-loading,
+.shelf-empty {
+    color: var(--text-tertiary);
+    font-size: 14px;
+    padding: 24px 0;
+    text-align: center;
+}
+
+.shelf-error {
+    color: var(--danger);
+    background: var(--danger-soft);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 14px;
+}
+
+.book-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.book-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--surface-muted);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text-primary);
+    font: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.book-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+.book-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.book-card-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.book-card-name {
+    font-weight: 700;
+    font-size: 15px;
+    word-break: break-word;
+    color: var(--text-primary);
+}
+
+.book-card-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+/* ----- ビューアビュー -----
+   本棚ページのレイアウト制約（.container の max-width・body の padding）から
+   完全に抜け出すため、ビューア表示中はビューポート全体を覆う固定オーバーレイにする。 */
+.viewer-view {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: #0b0c10;
+}
+
+body.viewer-open {
+    overflow: hidden;
+}
+
+.viewer-toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    min-height: 50px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-color);
+    padding: 6px 14px;
+    box-shadow: var(--shadow-sm);
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-title {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.viewer-book-title {
+    display: inline-block;
+    max-width: 220px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toolbar-nav {
+    flex: 1 1 240px;
+    min-width: 180px;
+}
+
+.toolbar-close {
+    margin-left: auto;
+}
+
+.toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 36px;
+    padding: 6px 12px;
+    background: var(--surface-muted);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.toolbar-btn:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+.toolbar-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.toolbar-btn.toolbar-toggle.active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+}
+
+.page-slider {
+    flex: 1;
+    accent-color: var(--accent);
+    min-width: 80px;
+}
+
+.page-indicator,
+.part-indicator,
+.zoom-indicator {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.zoom-indicator {
+    min-width: 44px;
+    text-align: center;
+}
+
+.part-indicator {
+    color: var(--text-tertiary);
+}
+
+/* ----- 読書面（常に暗色） ----- */
+.viewer-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: #0b0c10;
+    overflow: auto;
+}
+
+.click-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 25%;
+    z-index: 5;
+    cursor: pointer;
+}
+
+.click-zone-left {
+    left: 0;
+}
+
+.click-zone-right {
+    right: 0;
+}
+
+.page-surface {
+    position: relative;
+    display: flex;
+    align-items: center;
+    /* safe center: ズーム等ではみ出したとき先頭側が切れて到達不能になるのを防ぐ */
+    justify-content: safe center;
+    gap: 4px;
+    min-height: 100%;
+    padding: 24px;
+}
+
+.page-canvas {
+    display: none;
+    max-width: 100%;
+    height: auto;
+    background: #ffffff;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+}
+
+.page-canvas.visible {
+    display: block;
+}
+
+.page-loading,
+.page-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #d7dae0;
+    font-size: 14px;
+    text-align: center;
+    z-index: 10;
+}
+
+.page-error {
+    color: #ff9494;
+    background: rgba(239, 68, 68, 0.14);
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    max-width: 80%;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #ffffff;
+    animation: spinner-spin 0.8s linear infinite;
+}
+
+@keyframes spinner-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ----- レスポンシブ ----- */
+@media (max-width: 768px) {
+    .reader-body {
+        padding: 10px;
+    }
+
+    .viewer-toolbar {
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .toolbar-title {
+        order: 0;
+        flex-basis: 100%;
+        text-align: center;
+    }
+
+    .viewer-book-title {
+        max-width: 100%;
+    }
+
+    .toolbar-nav {
+        order: 1;
+        flex-basis: 100%;
+    }
+
+    .toolbar-info {
+        order: 2;
+    }
+
+    .toolbar-settings {
+        order: 3;
+        flex-basis: 100%;
+        flex-wrap: wrap;
+    }
+
+    .toolbar-close {
+        order: 4;
+        margin-left: 0;
+    }
+
+    .toolbar-btn {
+        min-width: 44px;
+        min-height: 40px;
+        padding: 8px 10px;
+    }
+
+    .page-surface {
+        padding: 10px;
+    }
+}
+
+/* ----- モーション低減 ----- */
+@media (prefers-reduced-motion: reduce) {
+    .book-card {
+        transition: none;
+    }
+
+    .book-card:hover {
+        transform: none;
+    }
+
+    .spinner {
+        animation: none;
+    }
+}
