@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/capture"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/dedupe"
+	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
+	"github.com/imutaroh/kindle-screenshot-app/internal/dedupe"
 )
 
 // captureLoop はスクショ→pHash重複判定→ページ送りを繰り返す。

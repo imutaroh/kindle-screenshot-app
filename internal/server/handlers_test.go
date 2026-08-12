@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/session"
+	"github.com/imutaroh/kindle-screenshot-app/internal/session"
 )
 
 func newTestServer(t *testing.T) *Server {

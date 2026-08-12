@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/dedupe"
+	"github.com/imutaroh/kindle-screenshot-app/internal/dedupe"
 )
 
 // TestScreenshotSmoke は実際に screencapture を叩くスモークテスト。

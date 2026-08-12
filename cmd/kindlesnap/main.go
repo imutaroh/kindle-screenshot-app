@@ -17,9 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/capture"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/dedupe"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/output"
+	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
+	"github.com/imutaroh/kindle-screenshot-app/internal/dedupe"
+	"github.com/imutaroh/kindle-screenshot-app/internal/output"
 )
 
 // options はコマンドラインフラグの値をまとめた構造体。

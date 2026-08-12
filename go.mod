@@ -1,4 +1,4 @@
-module github.com/imutaakihiro/kindle-screenshot-go
+module github.com/imutaroh/kindle-screenshot-app
 
 go 1.26.2
 

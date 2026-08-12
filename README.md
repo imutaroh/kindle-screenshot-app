@@ -1,7 +1,7 @@
-# kindle-screenshot-go
+# kindle-screenshot-app
 
 Kindle for Mac の全ページを自動スクリーンショットする CLI（Go 学習プロジェクト）。
-Python 版 [kindle-screenshot-app](../kindle-screenshot-app) の Go 移植。
+もとは Python 版として実装され、その後 Go に移植された。
 
 ## 設計方針
 
@@ -87,3 +87,6 @@ internal/session/   # Web UI 用キャプチャワーカー（状態管理・ホ
 internal/server/    # Web UI の HTTP ルーティング（net/http のみ、フレームワーク不使用）
 web/                # Web UI の静的資産（HTML/CSS/JS）を go:embed でバイナリに同梱
 ```
+
+> このリポジトリは、もともとの Python 版アプリのリポジトリに Go 実装を統合したもの。
+> Python 版のコードは削除されたが、git 履歴には残っている。

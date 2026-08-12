@@ -10,8 +10,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/server"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/session"
+	"github.com/imutaroh/kindle-screenshot-app/internal/server"
+	"github.com/imutaroh/kindle-screenshot-app/internal/session"
 )
 
 func defaultPort() int {

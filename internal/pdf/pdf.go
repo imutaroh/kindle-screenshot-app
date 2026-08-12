@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/output"
+	"github.com/imutaroh/kindle-screenshot-app/internal/output"
 )
 
 // CreateFromDir は dir 内の page_*.png を番号順に取得し、pagesPerPDF 枚ごとに

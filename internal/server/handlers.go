@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/capture"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/session"
-	"github.com/imutaakihiro/kindle-screenshot-go/web"
+	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
+	"github.com/imutaroh/kindle-screenshot-app/internal/session"
+	"github.com/imutaroh/kindle-screenshot-app/web"
 )
 
 // writeJSON は GET /api/books（読書ビューアが使う唯一の残存JSON API）が使う。

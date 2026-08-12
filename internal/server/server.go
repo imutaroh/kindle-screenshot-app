@@ -11,8 +11,8 @@ import (
 	"io/fs"
 	"net/http"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/session"
-	"github.com/imutaakihiro/kindle-screenshot-go/web"
+	"github.com/imutaroh/kindle-screenshot-app/internal/session"
+	"github.com/imutaroh/kindle-screenshot-app/web"
 )
 
 // Server は Web UI のルーティングと状態（session.Manager / 出力先ルート / テンプレート）を束ねる。

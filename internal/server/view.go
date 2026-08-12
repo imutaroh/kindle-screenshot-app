@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/session"
+	"github.com/imutaroh/kindle-screenshot-app/internal/session"
 )
 
 // pageData is the view-model for the full index page template ("page").

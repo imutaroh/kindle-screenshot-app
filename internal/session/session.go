@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/capture"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/output"
-	"github.com/imutaakihiro/kindle-screenshot-go/internal/pdf"
+	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
+	"github.com/imutaroh/kindle-screenshot-app/internal/output"
+	"github.com/imutaroh/kindle-screenshot-app/internal/pdf"
 )
 
 // ステータス文字列。Python 版 src/server.py の CaptureState.status と一字一句同じ日本語文字列。
