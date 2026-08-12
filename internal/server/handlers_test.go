@@ -115,21 +115,16 @@ func TestHandleUIStatus_Running_HasPollingTrigger(t *testing.T) {
 	}
 }
 
-func TestHandleReaderAndBooksAndPDFs_Unaffected(t *testing.T) {
+func TestHandleReaderAndBooksAndPDFs_Removed(t *testing.T) {
 	srv := newTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/reader", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /reader status = %d, want 200", rec.Code)
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/api/books", nil)
-	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api/books status = %d, want 200", rec.Code)
+	for _, path := range []string{"/reader", "/api/books", "/pdfs/a/b.pdf"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404 (removed reader feature)", path, rec.Code)
+		}
 	}
 }
 

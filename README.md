@@ -43,12 +43,12 @@ go build -o kindleweb ./cmd/kindleweb
 ```
 
 起動したら `http://localhost:5001` をブラウザで開く。本の名前・最大ページ数・PDF結合枚数・
-ページめくり方向・PNG自動削除を画面から設定して実行でき、`/reader` では生成したPDFをその場で読める。
+ページめくり方向・PNG自動削除を画面から設定して実行できる。
 
 フラグ:
 
 - `-port`: 待受ポート（デフォルト `5001`。環境変数 `PORT` があればそれを既定値として使う。`-port` の明示指定が最優先）
-- `-out`: 本の出力先ルートフォルダ（デフォルト `output`。`/api/books` や `/reader` の一覧・配信もこのフォルダ配下を対象にする）
+- `-out`: 本の出力先ルートフォルダ（デフォルト `output`）
 
 ```bash
 ./kindleweb -port 8080 -out ~/Documents/kindle-books

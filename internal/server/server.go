@@ -2,8 +2,7 @@
 // Python 版 src/server.py（Flask）の net/http 移植で、フレームワークは使わない。
 //
 // 主画面（キャプチャ設定・進捗表示）は html/template + htmx によるサーバーサイド
-// レンダリング。読書ビューア（/reader, reader.js）はテンプレートエンジンを介さず
-// 埋め込みHTMLをそのまま返す、従来通りの実装のまま変更していない。
+// レンダリング。
 package server
 
 import (
@@ -34,7 +33,6 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /{$}", s.handleIndex)
-	mux.HandleFunc("GET /reader", s.handleReader)
 
 	staticFS, err := fs.Sub(web.FS, "static")
 	if err != nil {
@@ -48,8 +46,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /ui/stop", s.handleUIStop)
 	mux.HandleFunc("POST /ui/open-folder", s.handleUIOpenFolder)
 
-	mux.HandleFunc("GET /api/books", s.handleBooks)
-	mux.HandleFunc("GET /pdfs/{book}/{filename}", s.handlePDF)
 	mux.HandleFunc("GET /api/running", s.handleRunning)
 
 	return mux

@@ -10,31 +10,13 @@ import (
 
 	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
 	"github.com/imutaroh/kindle-screenshot-app/internal/session"
-	"github.com/imutaroh/kindle-screenshot-app/web"
 )
 
-// writeJSON は GET /api/books（読書ビューアが使う唯一の残存JSON API）が使う。
+// writeJSON は GET /api/running が使う。
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
-}
-
-// writeHTMLFile は web.FS に埋め込まれた HTML ファイルをそのまま返す。
-// /reader は Jinja2/html-template のようなテンプレート変数を使わないため、
-// このまま埋め込みファイルを素通しするだけで足りる（主画面のみ html/template 化）。
-func writeHTMLFile(w http.ResponseWriter, path string) {
-	data, err := web.FS.ReadFile(path)
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(data)
-}
-
-func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
-	writeHTMLFile(w, "templates/reader.html")
 }
 
 // handleRunning はキャプチャ処理が実行中かどうかを返す。
