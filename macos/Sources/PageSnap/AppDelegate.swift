@@ -45,7 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         serverPort = port
 
-        guard let binaryURL = Bundle.main.resourceURL?.appendingPathComponent("kindleweb"),
+        // ヘルパーは Contents/MacOS/ に同梱している（Resources/ に置くと署名が
+        // nested code として扱われず、TCC が本体と別アプリ扱いして画面収録の
+        // 許可が効かなくなるため）。
+        guard let binaryURL = Bundle.main.executableURL?
+                .deletingLastPathComponent()
+                .appendingPathComponent("kindleweb"),
               FileManager.default.isExecutableFile(atPath: binaryURL.path) else {
             showFatalErrorAndQuit("サーバー本体（kindleweb）がアプリバンドル内に見つかりません。")
             return

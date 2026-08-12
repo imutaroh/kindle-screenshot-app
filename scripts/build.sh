@@ -16,7 +16,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp macos/.build/release/PageSnap "$APP/Contents/MacOS/PageSnap"
-cp build/kindleweb "$APP/Contents/Resources/kindleweb"
+# ヘルパー実行ファイルは Contents/MacOS/ に置く（Resources/ に実行ファイルを置くと
+# 署名が nested code として正しく扱われず、TCC が別アプリ扱いして
+# 画面収録・アクセシビリティの許可が効かなくなる）
+cp build/kindleweb "$APP/Contents/MacOS/kindleweb"
 [ -f assets/AppIcon.icns ] && cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
@@ -44,5 +47,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 # ローカル開発は ad-hoc 署名・非サンドボックス（~/Documents/PageSnap の読み書き・子プロセス起動のため）
-codesign --force --deep -s - --identifier com.imutaroh.pagesnap "$APP"
+# --deep は非推奨かつヘルパーの識別子を引き継がない（Goが付ける "a.out" のまま残る）ため、
+# 内側の実行ファイルから順に、明示的な識別子で署名する。
+codesign --force -s - --identifier com.imutaroh.pagesnap.kindleweb "$APP/Contents/MacOS/kindleweb"
+codesign --force -s - --identifier com.imutaroh.pagesnap "$APP"
 echo "Built: $APP"
