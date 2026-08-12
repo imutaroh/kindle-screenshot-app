@@ -50,6 +50,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/books", s.handleBooks)
 	mux.HandleFunc("GET /pdfs/{book}/{filename}", s.handlePDF)
+	mux.HandleFunc("GET /api/running", s.handleRunning)
 
 	return mux
 }

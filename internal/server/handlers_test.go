@@ -133,6 +133,34 @@ func TestHandleReaderAndBooksAndPDFs_Unaffected(t *testing.T) {
 	}
 }
 
+func TestHandleRunning_ReflectsManagerState(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/running", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"running":false`) {
+		t.Errorf("body = %q, want running:false while idle", body)
+	}
+
+	srv.mgr.SetRunningForTest(true)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/running", nil)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"running":true`) {
+		t.Errorf("body = %q, want running:true after SetRunningForTest(true)", body)
+	}
+}
+
 func TestOldJSONAPIRemoved(t *testing.T) {
 	srv := newTestServer(t)
 

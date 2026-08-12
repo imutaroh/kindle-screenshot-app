@@ -37,6 +37,12 @@ func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
 	writeHTMLFile(w, "templates/reader.html")
 }
 
+// handleRunning はキャプチャ処理が実行中かどうかを返す。
+// macOSアプリ殻（Swift）が終了時にキャプチャ中断確認ダイアログを出すかどうかの判定に使う。
+func (s *Server) handleRunning(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"running": s.mgr.IsRunning()})
+}
+
 // handleIndex は主画面をレンダリングする。設定フォームの初期値は
 // session パッケージの Default* 定数から埋め込み、進捗/ログは現在の
 // Manager の状態をそのまま反映する（リロードで実行中/完了/エラー状態が復元される）。
