@@ -66,6 +66,17 @@ type State struct {
 	Message     string
 	OutputDir   string // 未設定なら空文字（Python版の None 相当。HTML化はserver側の責務）
 	Error       string // 未設定なら空文字（Python版の None 相当）
+
+	// BookName は現在実行中、または直近に実行した本の名前。
+	// 実行中・結果表示（完了/エラー/中断）カードの「対象の本」表示に使う。
+	BookName string
+
+	// 以下4つは直近の Start 呼び出しで使われた設定値（未実行なら初期値）。
+	// 設定フォームの初期値の埋め戻し（GET / や GET /ui/reset）に使う。
+	MaxPages        int
+	PDFPagesPerFile int
+	Direction       string
+	AutoDeletePNG   bool
 }
 
 // LogEntry はキャプチャ処理中にサーバー側で記録した1件のログ。
@@ -92,13 +103,25 @@ type Manager struct {
 	bookName    string
 	err         string
 	logs        []LogEntry
+
+	// 直近の Start 呼び出しで使われた設定値。未実行時は下記デフォルト値のまま。
+	// GET / や GET /ui/reset の設定フォーム初期値埋め戻しに使う（PDF結合枚数・
+	// めくり方向・PNG自動削除は本をまたいで「前回の入力値」として引き継ぐ設計）。
+	maxPages        int
+	pdfPagesPerFile int
+	direction       capture.Direction
+	autoDeletePNG   bool
 }
 
 // NewManager は出力先ルートフォルダ outRoot を紐付けた Manager を作る。
 func NewManager(outRoot string) *Manager {
 	return &Manager{
-		outRoot: outRoot,
-		status:  StatusIdle,
+		outRoot:         outRoot,
+		status:          StatusIdle,
+		maxPages:        DefaultMaxPages,
+		pdfPagesPerFile: DefaultPDFPagesPerFile,
+		direction:       DefaultDirection,
+		autoDeletePNG:   DefaultAutoDeletePNG,
 	}
 }
 
@@ -114,13 +137,18 @@ func (m *Manager) Snapshot() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return State{
-		IsRunning:   m.isRunning,
-		CurrentPage: m.currentPage,
-		TotalPages:  m.totalPages,
-		Status:      m.status,
-		Message:     m.message,
-		OutputDir:   m.outputDir,
-		Error:       m.err,
+		IsRunning:       m.isRunning,
+		CurrentPage:     m.currentPage,
+		TotalPages:      m.totalPages,
+		Status:          m.status,
+		Message:         m.message,
+		OutputDir:       m.outputDir,
+		Error:           m.err,
+		BookName:        m.bookName,
+		MaxPages:        m.maxPages,
+		PDFPagesPerFile: m.pdfPagesPerFile,
+		Direction:       string(m.direction),
+		AutoDeletePNG:   m.autoDeletePNG,
 	}
 }
 
@@ -173,6 +201,10 @@ func (m *Manager) Start(bookName string, maxPages, pdfPagesPerFile int, autoDele
 	m.err = ""
 	m.outputDir = ""
 	m.bookName = bookName
+	m.maxPages = maxPages
+	m.pdfPagesPerFile = pdfPagesPerFile
+	m.direction = direction
+	m.autoDeletePNG = autoDeletePNG
 	m.mu.Unlock()
 
 	go m.runWorker(bookName, maxPages, pdfPagesPerFile, autoDeletePNG, direction)

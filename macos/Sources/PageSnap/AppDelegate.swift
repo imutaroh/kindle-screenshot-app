@@ -152,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - メインウィンドウ
 
     private func showMainWindow(port: UInt16) {
-        let contentRect = NSRect(x: 0, y: 0, width: 1200, height: 860)
+        let contentRect = NSRect(x: 0, y: 0, width: 820, height: 640)
         let window = NSWindow(
             contentRect: contentRect,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             defer: false
         )
         window.title = "PageSnap"
-        window.minSize = NSSize(width: 900, height: 600)
+        window.minSize = NSSize(width: 720, height: 560)
         window.center()
         window.delegate = self
 

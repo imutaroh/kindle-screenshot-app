@@ -77,19 +77,28 @@
     box-sizing: border-box;
 }
 
+html {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
         "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: var(--bg);
-    min-height: 100vh;
-    padding: 20px;
+    height: 100vh;
+    overflow: hidden;
+    padding: 12px;
     color: var(--text-primary);
     line-height: 1.5;
 }
 
 .container {
     max-width: 900px;
+    height: 100%;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
 }
 
 /* ----- ヘッダー ----- */
@@ -97,13 +106,14 @@ header {
     background: var(--surface);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 18px 24px;
-    margin-bottom: 20px;
+    padding: 12px 18px;
+    margin-bottom: 12px;
     box-shadow: var(--shadow-sm);
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 16px;
+    flex-shrink: 0;
 }
 
 header h1 {
@@ -176,28 +186,52 @@ header h1 {
 main {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* #statusArea は main の唯一の子で、<main> の中身全体（フォーム or 進捗+ログ or
+   結果+ログ、いずれもボタン行を含む）を担う。ログカードが残りの縦スペースを
+   埋めてページ全体はスクロールさせず、ログ本体だけが内部スクロールする。 */
+#statusArea {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
 }
 
 .card {
     background: var(--surface);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 26px;
+    padding: 16px;
     box-shadow: var(--shadow-sm);
 }
 
 .card h2 {
     font-size: 13px;
     font-weight: 700;
-    margin-bottom: 18px;
+    margin-bottom: 10px;
     color: var(--text-secondary);
     letter-spacing: 0.01em;
 }
 
+/* ログを含むカードは残りの縦スペースを埋め、ログ本体だけが内部スクロールする */
+.log-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-card h2 {
+    flex-shrink: 0;
+}
+
 /* ----- フォーム ----- */
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 8px;
 }
 
 .form-group:last-of-type {
@@ -253,6 +287,15 @@ small {
     margin-top: 6px;
     color: var(--text-tertiary);
     font-size: 12px;
+}
+
+/* 本の名前が空のままフォーム送信したときのインラインエラー文言。
+   入力欄自体は .input-error で赤枠になるので、こちらは補足テキストのみ。 */
+.field-error {
+    margin-top: 6px;
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 600;
 }
 
 /* ----- チェックボックス（トグルスイッチ） ----- */
@@ -385,7 +428,8 @@ small {
 .button-group {
     display: flex;
     gap: 10px;
-    margin-top: 24px;
+    margin-top: 12px;
+    flex-shrink: 0;
 }
 
 .btn {
@@ -525,9 +569,18 @@ small {
     font-size: 14px;
 }
 
+.output-dir {
+    margin-top: 10px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    word-break: break-all;
+}
+
 /* ----- ログ（ライト/ダーク共通のターミナル風） ----- */
 .log-container {
-    max-height: 300px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     background: var(--log-bg);
     border: 1px solid var(--log-border);
@@ -562,41 +615,22 @@ footer {
     background: var(--surface);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 20px 24px;
-    margin-top: 20px;
+    padding: 10px 18px;
+    margin-top: 12px;
     text-align: center;
     box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
 }
 
 footer p {
-    margin: 4px 0;
+    margin: 2px 0;
     color: var(--text-tertiary);
     font-size: 13px;
 }
 
-footer .warning {
+.footer-hint {
     color: var(--text-secondary);
     font-weight: 500;
-}
-
-.hotcorner-help {
-    margin-top: 16px;
-    padding: 12px 16px;
-    background: rgba(217, 119, 6, 0.08);
-    border-left: 3px solid rgba(217, 119, 6, 0.5);
-    border-radius: var(--radius-sm);
-    text-align: left;
-    display: inline-block;
-}
-
-.hotcorner-help p {
-    margin: 4px 0;
-    color: var(--text-secondary);
-    font-size: 13px;
-}
-
-.hotcorner-help strong {
-    color: var(--text-primary);
 }
 
 /* ----- トースト通知 ----- */
@@ -651,8 +685,14 @@ footer .warning {
     border-left-color: var(--danger);
 }
 
-/* ----- レスポンシブ ----- */
-@media (max-width: 768px) {
+/* ----- レスポンシブ -----
+   PageSnap はウィンドウ幅 720px 未満にリサイズできない固定デスクトップアプリ
+   （macos/Sources/PageSnap/AppDelegate.swift の minSize）なので、この
+   ブレークポイントはアプリ内では実質発火しない。ブラウザで単体表示した
+   場合の保険としてのみ残す。720px 時点でヘッダーが縦積みになって主画面が
+   1画面に収まらなくなる事故を避けるため、しきい値はアプリの最小幅より
+   十分低く設定する。 */
+@media (max-width: 480px) {
     .form-row {
         grid-template-columns: 1fr;
     }

@@ -15,65 +15,12 @@
         </header>
 
         <main>
-            <!-- 入力セクション -->
-            {{/* novalidate: required のブラウザ標準バリデーションは送信自体を止めて
-                 サーバ側の422スタイル付きエラーに到達しないため、検証はサーバに一本化する */}}
-            <form id="captureForm" class="card" novalidate hx-post="/ui/start" hx-target="#statusArea" hx-swap="outerHTML">
-                <h2>📝 設定</h2>
-
-                <div class="form-group">
-                    <label for="bookName">本の名前（必須）</label>
-                    <input type="text" id="bookName" name="book_name" placeholder="例: プログラミング入門" required value="{{.BookName}}">
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="maxPages">最大ページ数</label>
-                        <input type="number" id="maxPages" name="max_pages" min="0" value="{{.MaxPages}}" placeholder="0 = 無制限">
-                        <small>0 = 無制限（推奨。自動停止 or 左上カーソルで終了）</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="pdfPagesPerFile">PDF結合枚数</label>
-                        <input type="number" id="pdfPagesPerFile" name="pdf_pages_per_file" min="1" value="{{.PDFPagesPerFile}}">
-                        <small>1つのPDFに含める画像枚数</small>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>ページめくり方向</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="direction" value="left" {{if eq .Direction "left"}}checked{{end}}>
-                            <span>← 左にめくる（日本語の本・縦書き右綴じ）</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="direction" value="right" {{if eq .Direction "right"}}checked{{end}}>
-                            <span>→ 右にめくる（英語の本・横書き左綴じ）</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="autoDeletePng" name="auto_delete_png" {{if .AutoDeletePNG}}checked{{end}}>
-                        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-                        <span class="switch-text">PDF作成後にPNGを自動削除</span>
-                    </label>
-                </div>
-            </form>
-
             {{template "status-panel" .Status}}
         </main>
 
         <footer>
-            <p>PageSnap v1.0</p>
-            <p class="warning">💡 実行開始するとKindleを自動で前面に表示します（事前にKindleを起動し、フルスクリーンにしておくのがおすすめ）</p>
-            <div class="hotcorner-help">
-                <p>🖱️ <strong>実行中の手動制御（ホットコーナー）</strong></p>
-                <p>画面の<strong>左上角</strong>にマウスを移動 → 取得済みPNGでPDF化して終了</p>
-                <p>画面の<strong>右上角</strong>にマウスを移動 → キャンセル（PDF化せず終了）</p>
-            </div>
+            <p>PageSnap v1.0 · 実行するとKindleが前面に出ます</p>
+            <p class="footer-hint">🖱️ 実行中: 左上角にマウス = PDF化して終了 / 右上角 = キャンセル</p>
         </footer>
     </div>
 
@@ -133,22 +80,61 @@
      フルページ描画時（.OOB=false）はヘッダー内にそのまま1回だけ出力される。 */}}
 {{define "status-badge"}}<div id="statusBadge" class="status-badge {{.BadgeClass}}"{{if .OOB}} hx-swap-oob="true"{{end}}>{{.BadgeLabel}}</div>{{end}}
 
-{{/* status-panel: #statusArea 断片。実行開始/停止/保存先ボタン・進捗表示・
-     ログパネルをまとめて含み、POST /ui/start・GET /ui/status・POST /ui/stop
-     の応答本体としてそのまま返される。実行中のときだけ自分自身を
-     hx-trigger="every 1s" でポーリングし、そうでない断片には
-     トリガーを付けない（htmx標準の「ポーリング自然停止」パターン）。 */}}
+{{/* status-panel: <main> の中身全体を返す #statusArea 断片。
+     ShowForm / IsRunning / ShowResult の3状態（排他的・網羅的）で
+     必要な要素だけを描画する。実行中はフォームがDOM上に存在しないため、
+     1秒ポーリング（hx-trigger="every 1s"）がフォーム入力値を巻き込む事故が
+     原理的に起きない。GET /ui/start・GET /ui/status・POST /ui/stop・
+     GET /ui/reset の応答本体としてそのまま返される。 */}}
 {{define "status-panel"}}<div id="statusArea"{{if .IsRunning}} hx-get="/ui/status" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
-    <div class="button-group">
-        {{if .ShowStartButton}}<button type="submit" form="captureForm" class="btn btn-primary" id="startButton">🚀 実行開始</button>{{end}}
-        {{if .ShowStopButton}}<button type="button" id="stopButton" class="btn btn-danger" hx-post="/ui/stop" hx-target="#statusArea" hx-swap="outerHTML">⏹️ 停止</button>{{end}}
-        {{if .ShowOpenFolderButton}}<button type="button" id="openFolderButton" class="btn btn-secondary" hx-post="/ui/open-folder" hx-swap="none">📂 保存先を開く</button>{{end}}
-    </div>
+{{if .ShowForm}}
+    {{/* novalidate: required のブラウザ標準バリデーションは送信自体を止めて
+         サーバ側の422スタイル付きエラーに到達しないため、検証はサーバに一本化する */}}
+    <form id="captureForm" class="card" novalidate hx-post="/ui/start" hx-target="#statusArea" hx-swap="outerHTML">
+        <h2>📝 設定</h2>
 
-    <section class="card" id="progressSection"{{if not .ShowProgress}} style="display: none;"{{end}}>
-        <h2>📊 進捗状況</h2>
+        <div class="form-group">
+            <label for="bookName">本の名前（必須）</label>
+            <input type="text" id="bookName" name="book_name" placeholder="例: プログラミング入門" required value="{{.BookName}}"{{if .ValidationError}} class="input-error"{{end}}>
+            {{if .ValidationError}}<p class="field-error" id="bookNameError">{{.ValidationError}}</p>{{end}}
+        </div>
 
-        {{if not .ValidationError}}
+        <div class="form-row">
+            <div class="form-group">
+                <label for="maxPages">最大ページ数</label>
+                <input type="number" id="maxPages" name="max_pages" min="0" value="{{.MaxPages}}" placeholder="0 = 無制限（自動停止 or 左上カーソル）">
+            </div>
+
+            <div class="form-group">
+                <label for="pdfPagesPerFile">PDF結合枚数</label>
+                <input type="number" id="pdfPagesPerFile" name="pdf_pages_per_file" min="1" value="{{.PDFPagesPerFile}}" placeholder="1つのPDFに含める画像枚数">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <div class="radio-group">
+                <label class="radio-label">
+                    <input type="radio" name="direction" value="left" {{if eq .Direction "left"}}checked{{end}}>
+                    <span>← 左にめくる（日本語・縦書き右綴じ）</span>
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="direction" value="right" {{if eq .Direction "right"}}checked{{end}}>
+                    <span>→ 右にめくる（英語・横書き左綴じ）</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="autoDeletePng" name="auto_delete_png" {{if .AutoDeletePNG}}checked{{end}}>
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                <span class="switch-text">PDF作成後にPNGを自動削除</span>
+            </label>
+        </div>
+    </form>
+{{else if .IsRunning}}
+    <section class="card" id="progressSection">
+        <h2>📊 進捗状況{{if .BookName}} — {{.BookName}}{{end}}</h2>
         <div class="progress-info">
             <div class="progress-bar-container">
                 <div class="progress-bar{{if .Indeterminate}} indeterminate{{end}}" id="progressBar" style="width: {{if .Indeterminate}}100{{else}}{{.ProgressPct}}{{end}}%;"></div>
@@ -158,17 +144,36 @@
                 <span id="progressPercent">{{.ProgressPctText}}</span>
             </div>
         </div>
-        {{end}}
-
-        <div class="message-box{{if .ValidationError}} error{{end}}" id="messageBox">
-            <p id="messageText">{{if .ValidationError}}{{.ValidationError}}{{else}}{{.Message}}{{end}}</p>
+        <div class="message-box" id="messageBox">
+            <p id="messageText">{{.Message}}</p>
         </div>
     </section>
 
-    <section class="card">
+    <section class="card log-card">
         <h2>📋 ログ</h2>
         {{template "log-panel" .}}
     </section>
+{{else if .ShowResult}}
+    <section class="card" id="resultSection">
+        <h2>{{if eq .BadgeClass "error"}}⚠️ エラー{{else}}✅ 結果{{end}}{{if .BookName}} — {{.BookName}}{{end}}</h2>
+        <div class="message-box{{if eq .BadgeClass "error"}} error{{end}}" id="messageBox">
+            <p id="messageText">{{.Message}}</p>
+        </div>
+        {{if .OutputDir}}<p class="output-dir">📁 {{.OutputDir}}</p>{{end}}
+    </section>
+
+    <section class="card log-card">
+        <h2>📋 ログ</h2>
+        {{template "log-panel" .}}
+    </section>
+{{end}}
+
+    <div class="button-group">
+        {{if .ShowStartButton}}<button type="submit" form="captureForm" class="btn btn-primary" id="startButton">🚀 実行開始</button>{{end}}
+        {{if .ShowStopButton}}<button type="button" id="stopButton" class="btn btn-danger" hx-post="/ui/stop" hx-target="#statusArea" hx-swap="outerHTML">⏹️ 停止</button>{{end}}
+        {{if .ShowResetButton}}<button type="button" id="openFolderButton" class="btn btn-secondary" hx-post="/ui/open-folder" hx-swap="none">📂 保存先を開く</button>
+        <button type="button" id="resetButton" class="btn btn-primary" hx-get="/ui/reset" hx-target="#statusArea" hx-swap="outerHTML">🔄 新しい本を撮る</button>{{end}}
+    </div>
 </div>
 {{if .OOB}}{{template "status-badge" .}}{{end}}{{end}}
 
@@ -177,8 +182,3 @@
     {{if .Logs}}{{range .Logs}}<p class="log-entry {{.Level}}">[{{.Time}}] {{.Text}}</p>
     {{end}}{{else}}<p class="log-entry">待機中...</p>{{end}}
 </div>{{end}}
-
-{{/* bookname-error-oob: POST /ui/start のバリデーションエラー（本名空）応答でのみ使う。
-     #statusArea 断片に加えて、実フォーム内の本名入力欄を hx-swap-oob で
-     直接差し替え、.input-error による赤枠表示を反映する。 */}}
-{{define "bookname-error-oob"}}<input type="text" id="bookName" name="book_name" class="input-error" placeholder="例: プログラミング入門" required hx-swap-oob="true">{{end}}

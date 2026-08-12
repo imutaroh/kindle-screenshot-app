@@ -44,6 +44,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /ui/start", s.handleUIStart)
 	mux.HandleFunc("GET /ui/status", s.handleUIStatus)
 	mux.HandleFunc("POST /ui/stop", s.handleUIStop)
+	mux.HandleFunc("GET /ui/reset", s.handleUIReset)
 	mux.HandleFunc("POST /ui/open-folder", s.handleUIOpenFolder)
 
 	mux.HandleFunc("GET /api/running", s.handleRunning)
