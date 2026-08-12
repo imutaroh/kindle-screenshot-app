@@ -730,3 +730,12 @@ footer .warning {
         transition: none;
     }
 }
+
+/* ----- htmx化: バリデーションエラー表示用の message-box バリアント ----- */
+.message-box.error {
+    border-left-color: var(--danger);
+}
+
+.message-box.error p {
+    color: var(--danger);
+}

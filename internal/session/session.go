@@ -2,7 +2,7 @@
 // Python 版 src/server.py の capture_worker + CaptureState の Go 移植。
 //
 // Manager はミューテックスで保護された状態を持ち、Start でバックグラウンド
-// goroutine を起動してキャプチャ〜PDF結合までを進める。/api/status はこの
+// goroutine を起動してキャプチャ〜PDF結合までを進める。GET /ui/status はこの
 // 状態をポーリングで読み取るだけの薄いハンドラになる（internal/server が担当）。
 package session
 
@@ -18,7 +18,7 @@ import (
 )
 
 // ステータス文字列。Python 版 src/server.py の CaptureState.status と一字一句同じ日本語文字列。
-// web/static/script.js はバッジ表示にこの値をそのまま使う。
+// internal/server のテンプレートはバッジ表示にこの値をそのまま使う。
 const (
 	StatusIdle    = "待機中"
 	StatusRunning = "実行中"
@@ -26,7 +26,7 @@ const (
 	StatusError   = "エラー"
 )
 
-// デフォルト設定値。Python 版 src/config.py と同じ値。GET /api/config はこれらをそのまま返す。
+// デフォルト設定値。Python 版 src/config.py と同じ値。GET / の設定フォーム初期値はこれらをそのまま使う。
 const (
 	DefaultStartDelay          = 5 * time.Second
 	DefaultPDFPagesPerFile     = 50
@@ -38,8 +38,14 @@ const (
 	DefaultDuplicateThreshold  = 5
 	DefaultDuplicateCheckCount = 2
 
+	// DefaultAutoDeletePNG はPDF作成後にPNGを自動削除する設定の初期値。
+	DefaultAutoDeletePNG = true
+
 	// cornerThresholdPx はホットコーナー判定の角からの距離（px）。Python版 config.CORNER_THRESHOLD_PX と同じ。
 	cornerThresholdPx = 10.0
+
+	// maxLogEntries はログ履歴のリングバッファ上限。
+	maxLogEntries = 200
 )
 
 // DefaultDirection は既定のページめくり方向（日本語の本＝右綴じ）。
@@ -51,15 +57,24 @@ var ErrAlreadyRunning = errors.New("既に実行中です")
 // ErrNotRunning は未実行時に Stop を呼んだ場合に返る。
 var ErrNotRunning = errors.New("実行中ではありません")
 
-// State は /api/status が返す値のスナップショット（呼び出し時点のコピー）。
+// State は GET /ui/status が返す値のスナップショット（呼び出し時点のコピー）。
 type State struct {
 	IsRunning   bool
 	CurrentPage int
 	TotalPages  int
 	Status      string
 	Message     string
-	OutputDir   string // 未設定なら空文字（Python版の None 相当。JSON化はserver側の責務）
+	OutputDir   string // 未設定なら空文字（Python版の None 相当。HTML化はserver側の責務）
 	Error       string // 未設定なら空文字（Python版の None 相当）
+}
+
+// LogEntry はキャプチャ処理中にサーバー側で記録した1件のログ。
+// 以前は web/static/script.js がステータスポーリングの差分からクライアント側で
+// 生成していたログを、サーバー側で一元的に記録するようにしたもの。
+type LogEntry struct {
+	Time  time.Time
+	Level string // "info" | "success" | "error"
+	Text  string
 }
 
 // Manager はキャプチャ処理の状態とライフサイクルを管理する。ゼロ値では使えない。NewManager で作る。
@@ -76,6 +91,7 @@ type Manager struct {
 	outputDir   string
 	bookName    string
 	err         string
+	logs        []LogEntry
 }
 
 // NewManager は出力先ルートフォルダ outRoot を紐付けた Manager を作る。
@@ -93,7 +109,7 @@ func (m *Manager) IsRunning() bool {
 	return m.isRunning
 }
 
-// Snapshot は現在の状態のコピーを返す（/api/status 用）。
+// Snapshot は現在の状態のコピーを返す（GET /ui/status 用）。
 func (m *Manager) Snapshot() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -106,6 +122,38 @@ func (m *Manager) Snapshot() State {
 		OutputDir:   m.outputDir,
 		Error:       m.err,
 	}
+}
+
+// addLog はログ履歴に1件追記する。上限 maxLogEntries を超えたら古いものから捨てる。
+// Start() を跨いでも履歴はリセットされず、アプリ起動中は蓄積し続ける。
+func (m *Manager) addLog(level, text string) {
+	m.mu.Lock()
+	m.logs = append(m.logs, LogEntry{Time: time.Now(), Level: level, Text: text})
+	if len(m.logs) > maxLogEntries {
+		m.logs = append([]LogEntry(nil), m.logs[len(m.logs)-maxLogEntries:]...)
+	}
+	m.mu.Unlock()
+}
+
+// Logs は記録済みログ履歴のコピーを古い順に返す。
+func (m *Manager) Logs() []LogEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]LogEntry, len(m.logs))
+	copy(out, m.logs)
+	return out
+}
+
+// SetRunningForTest は internal/server のハンドラテストが「実行中」状態のレンダリングを
+// 検証するためだけに使うテスト専用フック。実際のキャプチャ処理は一切走らない。
+// プロダクションコードから呼んではならない。
+func (m *Manager) SetRunningForTest(running bool) {
+	m.mu.Lock()
+	m.isRunning = running
+	if running {
+		m.status = StatusRunning
+	}
+	m.mu.Unlock()
 }
 
 // Start はバックグラウンド goroutine でキャプチャ処理を開始する。
@@ -164,6 +212,7 @@ func (m *Manager) setErrorState(errMsg string) {
 	m.err = errMsg
 	m.message = "エラー: " + errMsg
 	m.mu.Unlock()
+	m.addLog("error", "❌ エラー: "+errMsg)
 }
 
 // runWorker はキャプチャ〜PDF結合の一連の処理を行う。Start からgoroutineとして起動される。
@@ -173,6 +222,9 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 		m.isRunning = false
 		m.mu.Unlock()
 	}()
+
+	m.addLog("info", fmt.Sprintf("「%s」のキャプチャを開始しました", bookName))
+	m.addLog("info", "Kindle を自動で前面に表示します（フルスクリーン推奨）")
 
 	// 出力ディレクトリ作成（同名フォルダに既存ファイルがあれば連番で別フォルダ）
 	outDir, err := output.CreateUniqueDir(m.outRoot, bookName)
@@ -206,6 +258,7 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 		m.status = StatusIdle
 		m.message = "中断されました"
 		m.mu.Unlock()
+		m.addLog("info", "中断されました")
 		return
 	}
 
@@ -214,10 +267,12 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 	captured, cancelMsg, cancelled, err := m.captureLoop(kindle, outDir, maxPages, direction)
 	if cancelled {
 		// 右上ホットコーナーによるキャンセル：PDF化せず終了
+		msg := "🖱️ 右上ホットコーナーでキャンセル: " + cancelMsg
 		m.mu.Lock()
 		m.status = StatusIdle
-		m.message = "🖱️ 右上ホットコーナーでキャンセル: " + cancelMsg
+		m.message = msg
 		m.mu.Unlock()
+		m.addLog("info", msg)
 		return
 	}
 	if err != nil {
@@ -231,18 +286,17 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 	m.mu.Unlock()
 
 	if stopped {
+		msg := fmt.Sprintf("中断されました（%dページまで保存）", captured)
 		m.mu.Lock()
 		m.status = StatusIdle
-		m.message = fmt.Sprintf("中断されました（%dページまで保存）", captured)
+		m.message = msg
 		m.mu.Unlock()
+		m.addLog("info", msg)
 		return
 	}
 
 	if captured == 0 {
-		m.mu.Lock()
-		m.status = StatusError
-		m.err = "スクリーンショットが取得できませんでした"
-		m.mu.Unlock()
+		m.setErrorState("スクリーンショットが取得できませんでした")
 		return
 	}
 
@@ -254,10 +308,7 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 		return
 	}
 	if len(createdPDFs) == 0 {
-		m.mu.Lock()
-		m.status = StatusError
-		m.err = "PDF作成に失敗しました"
-		m.mu.Unlock()
+		m.setErrorState("PDF作成に失敗しました")
 		return
 	}
 
@@ -273,4 +324,5 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 	m.mu.Lock()
 	m.status = StatusDone
 	m.mu.Unlock()
+	m.addLog("success", "✅ 完了: "+outDir)
 }

@@ -75,11 +75,12 @@ func (m *Manager) captureLoop(kindle *capture.Kindle, outDir string, maxPages in
 		}
 		prev = h
 
-		// 進捗通知（web/static/script.js が /^ページ \d+ を保存中/ で判別するため書式厳守）
+		// 進捗通知
 		m.mu.Lock()
 		m.currentPage = page
 		m.message = fmt.Sprintf("ページ %d を保存中...", page)
 		m.mu.Unlock()
+		m.addLog("info", fmt.Sprintf("ページ %d を保存", page))
 
 		// 次のページへ
 		if terr := kindle.TurnPage(direction); terr != nil {

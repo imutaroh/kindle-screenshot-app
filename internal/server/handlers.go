@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/imutaakihiro/kindle-screenshot-go/internal/capture"
@@ -12,8 +13,16 @@ import (
 	"github.com/imutaakihiro/kindle-screenshot-go/web"
 )
 
+// writeJSON は GET /api/books（読書ビューアが使う唯一の残存JSON API）が使う。
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
 // writeHTMLFile は web.FS に埋め込まれた HTML ファイルをそのまま返す。
-// Python 版は Jinja2 テンプレートだが、テンプレート変数を使っていないためエンジン不要。
+// /reader は Jinja2/html-template のようなテンプレート変数を使わないため、
+// このまま埋め込みファイルを素通しするだけで足りる（主画面のみ html/template 化）。
 func writeHTMLFile(w http.ResponseWriter, path string) {
 	data, err := web.FS.ReadFile(path)
 	if err != nil {
@@ -24,128 +33,101 @@ func writeHTMLFile(w http.ResponseWriter, path string) {
 	w.Write(data)
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	writeHTMLFile(w, "templates/index.html")
-}
-
 func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
 	writeHTMLFile(w, "templates/reader.html")
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+// handleIndex は主画面をレンダリングする。設定フォームの初期値は
+// session パッケージの Default* 定数から埋め込み、進捗/ログは現在の
+// Manager の状態をそのまま反映する（リロードで実行中/完了/エラー状態が復元される）。
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	data := pageData{
+		BookName:        "",
+		MaxPages:        session.DefaultMaxPages,
+		PDFPagesPerFile: session.DefaultPDFPagesPerFile,
+		Direction:       string(session.DefaultDirection),
+		AutoDeletePNG:   session.DefaultAutoDeletePNG,
+		Status:          buildStatusArea(s.mgr, false, ""),
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "page", data); err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// renderStatusPanel は #statusArea 断片（+ hx-swap-oob 付きのステータスバッジ）を
+// status に応じたHTTPステータスで書き出す。POST /ui/start・GET /ui/status・
+// POST /ui/stop はすべてこのヘルパー経由でレスポンスを返す。
+func (s *Server) renderStatusPanel(w http.ResponseWriter, status int, sa statusAreaData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	s.tmpl.ExecuteTemplate(w, "status-panel", sa)
 }
 
-type startRequest struct {
-	BookName        *string `json:"book_name"`
-	MaxPages        *int    `json:"max_pages"`
-	PDFPagesPerFile *int    `json:"pdf_pages_per_file"`
-	AutoDeletePNG   *bool   `json:"auto_delete_png"`
-	Direction       *string `json:"direction"`
-}
-
-func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
-	if s.mgr.IsRunning() {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "既に実行中です"})
+// handleUIStart はキャプチャ処理を開始する。本の名前が空の場合は 422 を返し、
+// #statusArea 断片にエラーメッセージを含め、加えて実フォーム内の本名入力欄を
+// hx-swap-oob で .input-error 付きに差し替える。
+func (s *Server) handleUIStart(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
-	var req startRequest
-	// リクエストボディが空/不正でも落ちないよう、デコードエラーは無視して既定値のまま進める
-	// （Python 版 request.json も `data.get(...)` で欠損キーを許容する挙動に合わせる）。
-	json.NewDecoder(r.Body).Decode(&req)
-
-	bookName := ""
-	if req.BookName != nil {
-		bookName = strings.TrimSpace(*req.BookName)
-	}
+	bookName := strings.TrimSpace(r.FormValue("book_name"))
 	if bookName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "本の名前を入力してください"})
+		sa := buildStatusArea(s.mgr, true, "本の名前を入力してください")
+		s.renderStatusPanel(w, http.StatusUnprocessableEntity, sa)
+		s.tmpl.ExecuteTemplate(w, "bookname-error-oob", nil)
 		return
 	}
 
-	maxPages := 0
-	if req.MaxPages != nil {
-		maxPages = *req.MaxPages
+	maxPages := session.DefaultMaxPages
+	if v, err := strconv.Atoi(r.FormValue("max_pages")); err == nil {
+		maxPages = v
 	}
 
 	pdfPagesPerFile := session.DefaultPDFPagesPerFile
-	if req.PDFPagesPerFile != nil {
-		pdfPagesPerFile = *req.PDFPagesPerFile
+	if v, err := strconv.Atoi(r.FormValue("pdf_pages_per_file")); err == nil {
+		pdfPagesPerFile = v
 	}
 
-	autoDeletePNG := false
-	if req.AutoDeletePNG != nil {
-		autoDeletePNG = *req.AutoDeletePNG
-	}
+	autoDeletePNG := r.FormValue("auto_delete_png") != ""
 
 	direction := session.DefaultDirection
-	if req.Direction != nil && (*req.Direction == string(capture.Left) || *req.Direction == string(capture.Right)) {
-		direction = capture.Direction(*req.Direction)
+	if v := r.FormValue("direction"); v == string(capture.Left) || v == string(capture.Right) {
+		direction = capture.Direction(v)
 	}
 
-	if err := s.mgr.Start(bookName, maxPages, pdfPagesPerFile, autoDeletePNG, direction); err != nil {
-		if err == session.ErrAlreadyRunning {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "既に実行中です"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "message": err.Error()})
-		return
-	}
+	// ErrAlreadyRunning はここでは無視する。既に実行中断片をそのまま返せば、
+	// htmx が #statusArea を現状の実行中表示に置き換えるだけで実害がない。
+	_ = s.mgr.Start(bookName, maxPages, pdfPagesPerFile, autoDeletePNG, direction)
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "処理を開始しました"})
+	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, ""))
 }
 
-func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
-	if err := s.mgr.Stop(); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "実行中ではありません"})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "停止要求を送信しました"})
+// handleUIStatus は現在の状態の #statusArea 断片を返す。実行中の画面が
+// hx-trigger="every 1s" でポーリングする先。
+func (s *Server) handleUIStatus(w http.ResponseWriter, r *http.Request) {
+	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, ""))
 }
 
-func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	st := s.mgr.Snapshot()
-
-	var errVal, outDirVal any
-	if st.Error != "" {
-		errVal = st.Error
-	}
-	if st.OutputDir != "" {
-		outDirVal = st.OutputDir
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"is_running":   st.IsRunning,
-		"current_page": st.CurrentPage,
-		"total_pages":  st.TotalPages,
-		"status":       st.Status,
-		"message":      st.Message,
-		"error":        errVal,
-		"output_dir":   outDirVal,
-	})
+// handleUIStop は実行中のキャプチャ処理に停止要求を送る。未実行時のエラーは
+// 無視し（既に止まっている状態の断片をそのまま返せば十分）、現在の断片を返す。
+func (s *Server) handleUIStop(w http.ResponseWriter, r *http.Request) {
+	_ = s.mgr.Stop()
+	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, ""))
 }
 
-func (s *Server) handleOpenFolder(w http.ResponseWriter, r *http.Request) {
+// handleUIOpenFolder は出力フォルダを Finder で開く。hx-swap="none" 前提のため
+// レスポンスボディは持たず、常に 204 を返す。
+func (s *Server) handleUIOpenFolder(w http.ResponseWriter, r *http.Request) {
 	outDir := s.mgr.Snapshot().OutputDir
 	if outDir != "" {
 		if _, err := os.Stat(outDir); err == nil {
 			exec.Command("open", outDir).Run() // エラーは無視（Python版も check=False）
-			writeJSON(w, http.StatusOK, map[string]any{"success": true})
-			return
 		}
 	}
-	writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "出力フォルダがまだ作成されていません"})
-}
-
-func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"page_wait_time":     session.DefaultPageWaitTime.Seconds(),
-		"start_delay":        int(session.DefaultStartDelay.Seconds()),
-		"pdf_pages_per_file": session.DefaultPDFPagesPerFile,
-		"max_pages":          session.DefaultMaxPages,
-		"page_direction":     string(session.DefaultDirection),
-	})
+	w.WriteHeader(http.StatusNoContent)
 }
