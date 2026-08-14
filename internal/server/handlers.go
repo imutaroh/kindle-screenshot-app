@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -11,19 +10,6 @@ import (
 	"github.com/imutaroh/kindle-screenshot-app/internal/capture"
 	"github.com/imutaroh/kindle-screenshot-app/internal/session"
 )
-
-// writeJSON は GET /api/running が使う。
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
-}
-
-// handleRunning はキャプチャ処理が実行中かどうかを返す。
-// macOSアプリ殻（Swift）が終了時にキャプチャ中断確認ダイアログを出すかどうかの判定に使う。
-func (s *Server) handleRunning(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"running": s.mgr.IsRunning()})
-}
 
 // handleIndex は主画面をレンダリングする。<main> の中身は丸ごと
 // "status-panel" フラグメントに委譲し、Manager の現在の状態（待機中/実行中/

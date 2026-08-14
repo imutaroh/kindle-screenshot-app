@@ -38,9 +38,6 @@ venv.bak/
 output/
 *.png
 *.pdf
-# ただしアプリアイコンの生成物（scripts/make_icon.swift の出力）はコミット対象
-!assets/*.png
-!assets/AppIcon.iconset/*.png
 
 # macOS
 .DS_Store
@@ -57,9 +54,7 @@ output/
 # Go ビルド成果物
 /kindlesnap
 /kindleweb
-
-# Swift ビルド成果物（macos/.build/ 以下）
-.build/
+.bin/
 
 # Claude Code worktree
 .claude/worktrees/

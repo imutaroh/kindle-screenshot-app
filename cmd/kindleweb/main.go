@@ -1,4 +1,4 @@
-// Command kindleweb は Kindle 自動スクショアプリの Web UI 版サーバー。
+// Command kindleweb は PageSnap の Web UI 版サーバー。
 // Python 版 server.py（Flask）の net/http 移植。
 package main
 
@@ -36,7 +36,7 @@ func main() {
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 
 	fmt.Println("==================================================")
-	fmt.Println("📚 Kindle 自動スクショアプリ - Web UI版 (Go)")
+	fmt.Println("📚 PageSnap - Web UI版 (Go)")
 	fmt.Println("==================================================")
 	fmt.Printf("\n🌐 ブラウザで以下のURLにアクセスしてください:\n")
 	fmt.Printf("   http://localhost:%d\n", *port)
