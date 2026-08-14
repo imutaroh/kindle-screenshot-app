@@ -42,6 +42,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 imutaroh. All rights reserved.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Kindle アプリを前面に出し、ページをめくるために使用します。</string>
 </dict>
 </plist>
 PLIST
@@ -51,4 +52,5 @@ PLIST
 # 内側の実行ファイルから順に、明示的な識別子で署名する。
 codesign --force -s - --identifier com.imutaroh.pagesnap.kindleweb "$APP/Contents/MacOS/kindleweb"
 codesign --force -s - --identifier com.imutaroh.pagesnap "$APP"
+codesign --verify --strict --verbose=2 "$APP"
 echo "Built: $APP"
