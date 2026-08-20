@@ -32,9 +32,14 @@ const (
 var kindleAppNames = []string{"Kindle", "Amazon Kindle"}
 
 // Kindle は Kindle アプリへの操作をまとめた型。
-// 前面化に成功したアプリ名をキャッシュし、2回目以降の試行を減らす。
+// 前面化に成功したアプリ名や、ウィンドウ発見（Discover）で得た情報をキャッシュし、
+// 2回目以降の試行を減らす。
 type Kindle struct {
-	appName string // 前面化に成功したアプリ名（未確定なら空文字）
+	appName  string  // 前面化に成功した／発見できたアプリ名（未確定なら空文字）
+	pid      int     // Kindle アプリのプロセスID（0 = 未発見）
+	windowID int     // キャプチャ対象のウィンドウID（0 = 未発見）
+	width    float64 // 発見時のウィンドウ幅（ログ・診断用）
+	height   float64 // 発見時のウィンドウ高さ（ログ・診断用）
 }
 
 // Activate は Kindle アプリを前面に出す。
