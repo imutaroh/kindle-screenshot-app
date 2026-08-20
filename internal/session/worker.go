@@ -11,8 +11,8 @@ import (
 )
 
 // captureLoop はスクショ→pHash重複判定→ページ送りを繰り返す。
-// Python 版 src/screenshot.py の capture_all_pages の移植だが、以下の3点により
-// cmd/kindlesnap/main.go の captureAllPages とはあえて共通化していない:
+// Python 版 src/screenshot.py の capture_all_pages の移植（旧 CLI 版 kindlesnap の
+// captureAllPages と同系だが、以下の3点により共通化していなかった経緯がある）:
 //   - Manager の状態（進捗・停止要求）を毎ページ更新する
 //   - ホットコーナー判定（左上=取得済み分でPDF化して正常終了 / 右上=キャンセル）が入る
 //   - 停止判定が Manager のフラグ（Web UIの停止ボタン）経由

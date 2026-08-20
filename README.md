@@ -1,6 +1,6 @@
 # kindle-screenshot-app
 
-Kindle for Mac の全ページを自動スクリーンショットする CLI（Go 学習プロジェクト）。
+Kindle for Mac の全ページを自動スクリーンショットする Web アプリ（Go 学習プロジェクト）。
 もとは Python 版として実装され、その後 Go に移植された。
 
 ## 設計方針
@@ -12,28 +12,13 @@ Kindle for Mac の全ページを自動スクリーンショットする CLI（G
 
 ## フェーズ計画
 
-- [x] **① CLI**: スクショ → ページ送り → pHash 自動停止（このリポジトリの現状）
+- [x] **① CLI**: スクショ → ページ送り → pHash 自動停止（後に Web UI へ一本化し CLI は廃止）
 - [x] **② PDF結合**: 自前の最小PDFライター（`internal/pdf`）で PNG → PDF
 - [x] **③ Web UI**: `net/http` + `embed` で Python 版の Web UI を移植
 
 ## 使い方
 
-### CLI（kindlesnap）
-
-```bash
-go build -o kindlesnap ./cmd/kindlesnap
-./kindlesnap -book "本の名前"            # 日本語の本（左めくり）
-./kindlesnap -book "Some Book" -dir right  # 英語の本（右めくり）
-```
-
-実行すると Kindle を自動で前面に出し、5秒カウントダウン後にキャプチャ開始。
-最終ページで同じ画面が2回続くと自動停止する。途中で止めるには `Ctrl+C`。
-
-主なフラグは `./kindlesnap -h` を参照。
-
-### Web UI（kindleweb）
-
-Python 版と同じ Web UI 体験を、依存ゼロの単一バイナリで提供する。
+Python 版と同じ Web UI 体験を、依存ゼロの単一バイナリ（`kindleweb`）で提供する。
 
 **起動方法1: `start.command` をダブルクリック**（推奨）
 
@@ -67,15 +52,14 @@ Kindle を副ディスプレイに出している場合は角判定がずれる�
 
 ## 必要な権限（初回のみ）
 
-CLI（`kindlesnap`）・Web UI（`kindleweb`、`start.command` 経由でもターミナルから直接でも）は、
+`kindleweb`（`start.command` 経由でもターミナルから直接でも）は、
 起動に使うターミナルアプリ（Terminal.app / iTerm / Ghostty など）に
 「システム設定 > プライバシーとセキュリティ」で以下を許可する:
 
 - **画面収録**（screencapture 用）
 - **アクセシビリティ**（ページ送りのキー送信用）
 
-`kindlesnap`（CLI）・`kindleweb`（Web UI）のどちらも同じ権限が必要。Apple 署名済みのターミナル
-アプリ自体に権限を紐付けるため、アプリを再ビルドしても許可が外れることはない。
+Apple 署名済みのターミナルアプリ自体に権限を紐付けるため、アプリを再ビルドしても許可が外れることはない。
 
 ## テスト
 
@@ -87,7 +71,6 @@ KINDLESNAP_SMOKE=1 go test ./internal/capture/ -v    # 実際に画面をキャ�
 ## 構成
 
 ```
-cmd/kindlesnap/     # CLI エントリーポイント（フラグ・メインループ・シグナル処理）
 cmd/kindleweb/      # Web UI サーバーのエントリーポイント（-port / -out フラグ）
 internal/capture/   # screencapture / osascript のラッパー（マウス座標・画面サイズ取得も含む）
 internal/dedupe/    # pHash による同一ページ判定（自動停止用）
