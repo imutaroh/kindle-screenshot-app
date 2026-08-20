@@ -1,11 +1,8 @@
 package capture
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -36,7 +33,7 @@ func TestTurnPageSmoke(t *testing.T) {
 	before := filepath.Join(dir, "before.png")
 	after := filepath.Join(dir, "after.png")
 
-	if err := captureWindowForTest(k.windowID, before); err != nil {
+	if err := k.Screenshot(before); err != nil {
 		t.Fatalf("ページ送り前のキャプチャ: %v", err)
 	}
 
@@ -49,7 +46,7 @@ func TestTurnPageSmoke(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	var capErr error
 	for i := 0; i < 5; i++ {
-		if capErr = captureWindowForTest(k.windowID, after); capErr == nil {
+		if capErr = k.Screenshot(after); capErr == nil {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -81,15 +78,4 @@ func TestTurnPageSmoke(t *testing.T) {
 	if d <= 5 {
 		t.Errorf("ページが進んでいない可能性があります（pHash 距離 %d <= 5）", d)
 	}
-}
-
-// captureWindowForTest はウィンドウ単体キャプチャの最小版。
-// 本体実装（Screenshot のウィンドウ指定化）は後続ステップで入るため、
-// このテストでは screencapture -l を直接叩く。
-func captureWindowForTest(windowID int, path string) error {
-	out, err := exec.Command("screencapture", "-l", strconv.Itoa(windowID), "-o", "-x", path).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("screencapture -l %d: %w: %s", windowID, err, out)
-	}
-	return nil
 }

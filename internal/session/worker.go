@@ -39,7 +39,7 @@ func (m *Manager) captureLoop(kindle *capture.Kindle, outDir string, maxPages in
 			settleTimeout = DefaultInitialSettleTimeout
 		}
 		path := pagePath(outDir, page)
-		h, stopped, serr := m.captureSettled(path, prev, settleTimeout)
+		h, stopped, serr := m.captureSettled(kindle, path, prev, settleTimeout)
 		if serr != nil {
 			return page - 1, serr
 		}
@@ -90,7 +90,12 @@ func (m *Manager) captureLoop(kindle *capture.Kindle, outDir string, maxPages in
 //
 // ループの毎回の反復で停止要求（m.shouldStopNow）をチェックするため、settleTimeout の間
 // ずっと無反応になることはない（最悪でも DefaultPollInterval + スクショ1回分の時間で反応する）。
-func (m *Manager) captureSettled(path string, prevPageHash dedupe.Hash, settleTimeout time.Duration) (h dedupe.Hash, stopped bool, err error) {
+//
+// スクショ自体の失敗（ページめくりアニメーション中にウィンドウが一時的にキャプチャ
+// 不能になるなど、実機で3連続失敗を観測済み）は即エラーにせず、適応待機の1回分の
+// 不採用として扱ってポーリングを続ける。デッドライン到達時点でも失敗しているなら、
+// そのエラーを返す（Kindle終了などの恒常的な失敗はここで検知される）。
+func (m *Manager) captureSettled(kindle *capture.Kindle, path string, prevPageHash dedupe.Hash, settleTimeout time.Duration) (h dedupe.Hash, stopped bool, err error) {
 	deadline := time.Now().Add(settleTimeout)
 	var lastPoll dedupe.Hash
 
@@ -99,8 +104,16 @@ func (m *Manager) captureSettled(path string, prevPageHash dedupe.Hash, settleTi
 			return dedupe.Hash{}, true, nil
 		}
 
-		if serr := capture.Screenshot(path); serr != nil {
-			return dedupe.Hash{}, false, serr
+		if serr := kindle.Screenshot(path); serr != nil {
+			// ページめくりアニメーション中はウィンドウが一時的にキャプチャ不能に
+			// なることがある（実機で3連続失敗を観測）。適応待機の1回分の不採用として
+			// 扱い、デッドラインまでポーリングを続ける。恒常的な失敗（Kindle 終了等）は
+			// デッドライン到達時にエラーとして返る。
+			if time.Now().After(deadline) {
+				return dedupe.Hash{}, false, serr
+			}
+			time.Sleep(DefaultPollInterval)
+			continue
 		}
 		current, herr := dedupe.HashFile(path)
 		if herr != nil {

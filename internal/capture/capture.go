@@ -7,7 +7,9 @@ package capture
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,6 +42,17 @@ type Kindle struct {
 	windowID int     // キャプチャ対象のウィンドウID（0 = 未発見）
 	width    float64 // 発見時のウィンドウ幅（ログ・診断用）
 	height   float64 // 発見時のウィンドウ高さ（ログ・診断用）
+
+	// onRediscover はウィンドウ再発見（本の開き直し等でwindowIDが変わった）時に
+	// 呼ばれるコールバック。capture パッケージ自体はロガーを持たない設計にして
+	// おり、警告ログの配線は呼び出し側（session パッケージ）に委ねる。
+	onRediscover func(before, after string)
+}
+
+// SetOnRediscover は Discover による再発見でウィンドウ情報が変化したときに
+// 呼ばれるコールバックを登録する。
+func (k *Kindle) SetOnRediscover(f func(before, after string)) {
+	k.onRediscover = f
 }
 
 // Activate は Kindle アプリを前面に出す。
@@ -106,14 +119,51 @@ func (k *Kindle) TurnPage(dir Direction) error {
 	return nil
 }
 
-// Screenshot はメインディスプレイ全体を PNG として path に保存する。
+// Screenshot は Kindle ウィンドウ単体を PNG として path に保存する。
+// 失敗時はウィンドウIDが変わった可能性（本の開き直し等）があるため、
+// 1回だけ再発見してリトライする。
 // ターミナルに「画面収録」権限が必要。
-func Screenshot(path string) error {
-	// -x: シャッター音を鳴らさない / -m: メインディスプレイのみ
-	out, err := exec.Command("screencapture", "-x", "-m", path).CombinedOutput()
+func (k *Kindle) Screenshot(path string) error {
+	if err := k.ensure(); err != nil {
+		return err
+	}
+	if err := k.captureWindow(path); err == nil {
+		return nil
+	}
+	before := k.Describe()
+	if derr := k.Discover(); derr != nil {
+		return derr
+	}
+	if k.Describe() != before && k.onRediscover != nil {
+		k.onRediscover(before, k.Describe())
+	}
+	return k.captureWindow(path)
+}
+
+// captureWindow は k.windowID 指定でウィンドウ単体を PNG として path に保存する。
+func (k *Kindle) captureWindow(path string) error {
+	// captureSettled は同じ path に上書きし続けるため、screencapture が失敗
+	// して古い PNG が残っていると、pHash が古い画像を読んで「描画が安定した」
+	// と誤判定し、同一ページを誤って採用してしまう。事前削除 + 撮影後の存在
+	// 検証が、適応待機の正しさ（＝古い画像を絶対に読ませない）の前提になる。
+	os.Remove(path)
+
+	// -l: ウィンドウ単体を指定（背面・別ディスプレイでも撮れる）
+	// -o: ウィンドウの影を付けない / -x: シャッター音を鳴らさない
+	out, err := exec.Command("screencapture", "-l", strconv.Itoa(k.windowID), "-o", "-x", path).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("screencaptureに失敗しました（画面収録権限を確認）: %w: %s",
 			err, strings.TrimSpace(string(out)))
+	}
+
+	// ページめくりアニメーション中は「could not create image from window」で
+	// exit 1 になることを実機で観測済み（上の err で捕捉される）。ここではさらに
+	// 防御として、exit 0 なのにファイルが無い・空という未観測の失敗モードにも
+	// 備えて実際にファイルが書かれたかを検証する（古い PNG は事前削除済みなので、
+	// この検証を抜けた path には必ず今回撮った画像だけが存在する）。
+	st, serr := os.Stat(path)
+	if serr != nil || st.Size() == 0 {
+		return fmt.Errorf("screencaptureは成功しましたが画像が保存されませんでした: %s", path)
 	}
 	return nil
 }
