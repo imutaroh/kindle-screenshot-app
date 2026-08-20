@@ -22,7 +22,7 @@ const (
 	Right Direction = "right"
 )
 
-// macOS の仮想キーコード（System Events の key code に渡す値）
+// macOS の仮想キーコード（CGEventCreateKeyboardEvent に渡す値）
 const (
 	keyCodeLeftArrow  = 123
 	keyCodeRightArrow = 124
@@ -63,16 +63,45 @@ func (k *Kindle) Activate() error {
 	return fmt.Errorf("Kindleアプリを前面に出せませんでした: %w", lastErr)
 }
 
-// TurnPage は矢印キーを送ってページを1枚めくる。
-// System Events を使うため、ターミナルに「アクセシビリティ」権限が必要。
+// keyEventScript は矢印キーの down/up を Kindle のプロセスへ直送する JXA。
+// fmt.Sprintf で pid とキーコード（いずれも int）を埋め込んで使う。
+//
+// System Events の `key code`（最前面アプリへの送信）ではなく
+// CGEventPostToPid を使うのは、キーボードフォーカスを奪わないため。
+// イベントは対象プロセスのイベントキューに直接入り、システム全体の
+// 入力ストリームを経由しないので、メインディスプレイで作業中のアプリに
+// キーが漏れない（実機検証済み: フォーカスが別アプリのままページがめくれる）。
+// down/up を1回の osascript 呼び出しにまとめるのは起動コスト
+// （実測0.11〜0.12秒/回）を半減させるため。
+const keyEventScript = `
+ObjC.import("CoreGraphics");
+const pid = %d;
+const keyCode = %d;
+const down = $.CGEventCreateKeyboardEvent($(), keyCode, true);
+const up = $.CGEventCreateKeyboardEvent($(), keyCode, false);
+$.CGEventPostToPid(pid, down);
+delay(0.03);
+$.CGEventPostToPid(pid, up);
+"ok";
+`
+
+// TurnPage は矢印キーイベントを Kindle のプロセスへ直送してページを1枚めくる。
+// 前面化不要（Kindle がバックグラウンド・別ディスプレイ・別 Space でも動く）。
+// ターミナルに「アクセシビリティ」権限が必要。
 func (k *Kindle) TurnPage(dir Direction) error {
+	if err := k.ensure(); err != nil {
+		return err
+	}
 	code := keyCodeLeftArrow
 	if dir == Right {
 		code = keyCodeRightArrow
 	}
-	script := fmt.Sprintf(`tell application "System Events" to key code %d`, code)
-	if err := runOsascript(script); err != nil {
+	out, err := runJXA(fmt.Sprintf(keyEventScript, k.pid, code))
+	if err != nil {
 		return fmt.Errorf("ページ送りに失敗しました（システム設定 > プライバシーとセキュリティ > アクセシビリティ を確認）: %w", err)
+	}
+	if out != "ok" {
+		return fmt.Errorf("ページ送りスクリプトの出力が想定外です: %q", out)
 	}
 	return nil
 }
