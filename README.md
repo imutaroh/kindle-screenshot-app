@@ -46,10 +46,6 @@ go build -o kindleweb ./cmd/kindleweb
 ./kindleweb -port 8080 -out ~/Documents/kindle-books
 ```
 
-実行中はホットコーナーで手動制御できる（画面**左上角**にマウス移動＝取得済み分でPDF化して終了、
-**右上角**＝キャンセル）。マルチディスプレイ環境では `NSScreen.mainScreen` 基準の座標になるため、
-Kindle を副ディスプレイに出している場合は角判定がずれることがある。
-
 ## 必要な権限（初回のみ）
 
 `kindleweb`（`start.command` 経由でもターミナルから直接でも）は、
@@ -76,7 +72,7 @@ internal/capture/   # screencapture / osascript のラッパー（マウス座�
 internal/dedupe/    # pHash による同一ページ判定（自動停止用）
 internal/output/    # 出力フォルダの連番作成（上書き防止）
 internal/pdf/       # 連番PNG → PDF結合（自前の最小PDFライター）
-internal/session/   # Web UI 用キャプチャワーカー（状態管理・ホットコーナー・進捗）
+internal/session/   # Web UI 用キャプチャワーカー（状態管理・進捗）
 internal/server/    # Web UI の HTTP ルーティング（net/http のみ、フレームワーク不使用）
 web/                # Web UI の静的資産（HTML/CSS/JS）を go:embed でバイナリに同梱
 start.command       # ダブルクリック起動スクリプト（ビルド → サーバ起動 → ブラウザオープン）

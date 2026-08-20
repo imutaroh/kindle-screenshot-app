@@ -109,7 +109,7 @@ func buildStatusArea(mgr *session.Manager, oob bool, validationError string, for
 	}
 
 	// 3状態は排他的かつ網羅的: 実行中 → 結果あり（完了/エラー/中断） → それ以外はフォーム。
-	// 中断（停止ボタン・右上ホットコーナー）は runWorker が status を StatusIdle に戻すため、
+	// 中断（停止ボタン）は runWorker が status を StatusIdle に戻すため、
 	// StatusDone/StatusError では判定できない。OutputDir と Message の両方が
 	// 埋まっていることを「一度でも実行された」印として使う。
 	sa.ShowResult = validationError == "" && !st.IsRunning && st.OutputDir != "" && st.Message != ""

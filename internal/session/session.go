@@ -55,9 +55,6 @@ const (
 	// DefaultAutoDeletePNG はPDF作成後にPNGを自動削除する設定の初期値。
 	DefaultAutoDeletePNG = true
 
-	// cornerThresholdPx はホットコーナー判定の角からの距離（px）。Python版 config.CORNER_THRESHOLD_PX と同じ。
-	cornerThresholdPx = 10.0
-
 	// maxLogEntries はログ履歴のリングバッファ上限。
 	maxLogEntries = 200
 )
@@ -310,17 +307,7 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 
 	// スクリーンショット取得
 	m.setMessage("スクリーンショット取得中...")
-	captured, cancelMsg, cancelled, err := m.captureLoop(kindle, outDir, maxPages, direction)
-	if cancelled {
-		// 右上ホットコーナーによるキャンセル：PDF化せず終了
-		msg := "🖱️ 右上ホットコーナーでキャンセル: " + cancelMsg
-		m.mu.Lock()
-		m.status = StatusIdle
-		m.message = msg
-		m.mu.Unlock()
-		m.addLog("info", msg)
-		return
-	}
+	captured, err := m.captureLoop(kindle, outDir, maxPages, direction)
 	if err != nil {
 		m.setErrorState(err.Error())
 		return
