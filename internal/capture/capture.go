@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Direction はページめくり方向を表す。
@@ -34,10 +33,9 @@ const (
 var kindleAppNames = []string{"Kindle", "Amazon Kindle"}
 
 // Kindle は Kindle アプリへの操作をまとめた型。
-// 前面化に成功したアプリ名や、ウィンドウ発見（Discover）で得た情報をキャッシュし、
-// 2回目以降の試行を減らす。
+// ウィンドウ発見（Discover）で得た情報をキャッシュし、2回目以降の試行を減らす。
 type Kindle struct {
-	appName  string  // 前面化に成功した／発見できたアプリ名（未確定なら空文字）
+	appName  string  // 発見できたアプリ名（"Kindle" / "Amazon Kindle"。未発見なら空文字）
 	pid      int     // Kindle アプリのプロセスID（0 = 未発見）
 	windowID int     // キャプチャ対象のウィンドウID（0 = 未発見）
 	width    float64 // 発見時のウィンドウ幅（ログ・診断用）
@@ -53,27 +51,6 @@ type Kindle struct {
 // 呼ばれるコールバックを登録する。
 func (k *Kindle) SetOnRediscover(f func(before, after string)) {
 	k.onRediscover = f
-}
-
-// Activate は Kindle アプリを前面に出す。
-func (k *Kindle) Activate() error {
-	candidates := kindleAppNames
-	if k.appName != "" {
-		candidates = []string{k.appName}
-	}
-
-	var lastErr error
-	for _, name := range candidates {
-		script := fmt.Sprintf("tell application %q to activate", name)
-		if err := runOsascript(script); err != nil {
-			lastErr = err
-			continue
-		}
-		k.appName = name
-		time.Sleep(500 * time.Millisecond) // 前面に切り替わるのを待つ
-		return nil
-	}
-	return fmt.Errorf("Kindleアプリを前面に出せませんでした: %w", lastErr)
 }
 
 // keyEventScript は矢印キーの down/up を Kindle のプロセスへ直送する JXA。
@@ -164,15 +141,6 @@ func (k *Kindle) captureWindow(path string) error {
 	st, serr := os.Stat(path)
 	if serr != nil || st.Size() == 0 {
 		return fmt.Errorf("screencaptureは成功しましたが画像が保存されませんでした: %s", path)
-	}
-	return nil
-}
-
-// runOsascript は AppleScript を1つ実行し、失敗時は stderr を含むエラーを返す。
-func runOsascript(script string) error {
-	out, err := exec.Command("osascript", "-e", script).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("osascript: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

@@ -267,7 +267,7 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 	}()
 
 	m.addLog("info", fmt.Sprintf("「%s」のキャプチャを開始しました", bookName))
-	m.addLog("info", "Kindle を自動で前面に表示します（フルスクリーン推奨）")
+	m.addLog("info", "Kindle は前面に出しません。取り込み中もメインディスプレイでそのまま作業できます")
 
 	// 出力ディレクトリ作成（同名フォルダに既存ファイルがあれば連番で別フォルダ）
 	outDir, err := output.CreateUniqueDir(m.outRoot, bookName)
@@ -279,21 +279,40 @@ func (m *Manager) runWorker(bookName string, maxPages, pdfPagesPerFile int, auto
 	m.outputDir = outDir
 	m.mu.Unlock()
 
-	// Kindle を自動で前面に出す（失敗しても致命的ではない。手動切り替えを促すだけ）
+	// Kindle のウィンドウを自動検出する。前面化は一切しない（前面化はキーボード
+	// フォーカスを奪い、「メインで作業しながら取り込む」という目的そのものを壊す）。
 	kindle := &capture.Kindle{}
-	activated := kindle.Activate() == nil
+	kindle.SetOnRediscover(func(before, after string) {
+		m.addLog("info", fmt.Sprintf("⚠️ Kindleウィンドウを再発見しました（本の開き直し等でIDが変化）: %s → %s", before, after))
+	})
+	discoverErr := kindle.Discover()
+	if discoverErr == nil {
+		m.addLog("info", "Kindle を検出しました: "+kindle.Describe())
+	}
 
-	// 開始待機（1秒ごとにカウントダウンを表示し、停止要求にも即応する）
+	// 開始待機（1秒ごとにカウントダウンを表示し、停止要求にも即応する）。
+	// このカウントダウンは「検出結果を確認して止める猶予」。検出に失敗している間は
+	// 毎秒 Discover を再試行し、最後まで失敗したらエラー終了する。
 	for remaining := int(DefaultStartDelay.Seconds()); remaining > 0; remaining-- {
 		if m.shouldStopNow() {
 			break
 		}
-		if activated {
-			m.setMessage(fmt.Sprintf("Kindleを前面に表示しました。%d秒後に開始します（フルスクリーン推奨）...", remaining))
+		if discoverErr == nil {
+			m.setMessage(fmt.Sprintf("%s を検出しました。%d秒後に開始します（そのままメインで作業できます）...", kindle.Describe(), remaining))
 		} else {
-			m.setMessage(fmt.Sprintf("⚠️ Kindleを自動で前面に出せませんでした。%d秒以内に手動で切り替えてください...", remaining))
+			m.setMessage(fmt.Sprintf("⚠️ Kindleが見つかりません。%d秒以内に Kindle で本を開いてください...", remaining))
 		}
 		time.Sleep(time.Second)
+		if discoverErr != nil {
+			if discoverErr = kindle.Discover(); discoverErr == nil {
+				m.addLog("info", "Kindle を検出しました: "+kindle.Describe())
+			}
+		}
+	}
+
+	if !m.shouldStopNow() && discoverErr != nil {
+		m.setErrorState(discoverErr.Error())
+		return
 	}
 
 	if m.shouldStopNow() {
