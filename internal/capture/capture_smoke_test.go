@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/imutaroh/kindle-screenshot-app/internal/dedupe"
+	"github.com/imutaroh/kindle-screenshot-app/internal/frame"
 )
 
 // TestScreenshotSmoke は実際に screencapture を叩くスモークテスト。
@@ -39,18 +39,18 @@ func TestScreenshotSmoke(t *testing.T) {
 		t.Logf("saved %s (%d bytes)", p, st.Size())
 	}
 
-	// 実スクショで pHash パイプラインが通ることを確認
-	h1, err := dedupe.HashFile(p1)
+	// 実スクショで変化検出（internal/frame）のパイプラインが通ることを確認
+	f1, err := frame.Load(p1, k.WindowWidth())
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, err := dedupe.HashFile(p2)
+	f2, err := frame.Load(p2, k.WindowWidth())
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := h1.Distance(h2)
+	d, err := f1.Diff(f2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("連続スクショの pHash 距離 = %d（画面が変わっていなければ閾値5以下のはず）", d)
+	t.Logf("連続スクショの変化画素率 = %.4f%%、完全一致 = %v（画面が静止していれば 0%%・true のはず）", d*100, f1.Same(f2))
 }

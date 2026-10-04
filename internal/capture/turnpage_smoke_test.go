@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imutaroh/kindle-screenshot-app/internal/dedupe"
+	"github.com/imutaroh/kindle-screenshot-app/internal/frame"
 )
 
 // TestTurnPageSmoke は CGEventPostToPid によるバックグラウンドページ送りの
@@ -16,7 +16,7 @@ import (
 //	KINDLESNAP_SMOKE_KEYS=1 go test ./internal/capture/ -run TurnPage -v
 //
 // Kindle for Mac が起動していて本が開いている状態で実行すること。
-// 前後のウィンドウ単体スクショの pHash 距離で「フォーカスなしでページが
+// 前後のウィンドウ単体スクショの変化画素率（internal/frame）で「フォーカスなしでページが
 // 進んだ」ことを自動判定し、最後に逆方向へ1ページ戻して読書位置を復元する。
 func TestTurnPageSmoke(t *testing.T) {
 	if os.Getenv("KINDLESNAP_SMOKE_KEYS") != "1" {
@@ -62,20 +62,20 @@ func TestTurnPageSmoke(t *testing.T) {
 		}
 	}()
 
-	h1, err := dedupe.HashFile(before)
+	f1, err := frame.Load(before, k.WindowWidth())
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, err := dedupe.HashFile(after)
+	f2, err := frame.Load(after, k.WindowWidth())
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := h1.Distance(h2)
+	d, err := f1.Diff(f2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("ページ送り前後の pHash 距離 = %d", d)
-	if d <= 5 {
-		t.Errorf("ページが進んでいない可能性があります（pHash 距離 %d <= 5）", d)
+	t.Logf("ページ送り前後の変化画素率 = %.3f%%", d*100)
+	if d <= frame.ChangedFrac {
+		t.Errorf("ページが進んでいない可能性があります（変化画素率 %.3f%% <= %.3f%%）", d*100, frame.ChangedFrac*100)
 	}
 }

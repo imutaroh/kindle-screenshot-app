@@ -138,6 +138,13 @@ func (k *Kindle) ensure() error {
 	return k.Discover()
 }
 
+// WindowWidth は発見時のウィンドウ幅をポイント単位で返す（未発見なら0）。
+// screencapture -l の PNG はバッキングスケール倍の画素数で保存されるので、
+// 「PNG の幅 ÷ この値」で Retina 倍率（1x / 2x）を求められる。
+func (k *Kindle) WindowWidth() float64 {
+	return k.width
+}
+
 // Describe は現在保持しているウィンドウ情報を人間可読な1行にする。
 func (k *Kindle) Describe() string {
 	if k.windowID == 0 {
