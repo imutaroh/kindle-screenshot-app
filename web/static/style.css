@@ -27,6 +27,7 @@
     --success-dot: #22c55e;
     --info-dot: #3b82f6;
     --error-dot: #ef4444;
+    --warning-dot: #f59e0b;
 
     /* ログパネルはライト/ダーク共通のターミナル風配色 */
     --log-bg: #14161c;
@@ -165,6 +166,17 @@ header h1 {
 
 .status-badge.completed::before {
     background: var(--info-dot);
+}
+
+.status-badge.paused {
+    color: var(--text-primary);
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.status-badge.paused::before {
+    background: var(--warning-dot);
+    animation: pulse-dot 1.6s ease-in-out infinite;
 }
 
 .status-badge.error {
@@ -569,6 +581,23 @@ small {
     font-size: 14px;
 }
 
+/* 一時停止中の案内（ユーザーの操作が必要なので警告色で目立たせる） */
+.message-box.paused {
+    border-left-color: var(--warning-dot);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.message-box.paused p {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.resolution {
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
 .output-dir {
     margin-top: 10px;
     color: var(--text-tertiary);
@@ -730,7 +759,8 @@ footer p {
         transform: none;
     }
 
-    .status-badge.running::before {
+    .status-badge.running::before,
+    .status-badge.paused::before {
         animation: none;
     }
 

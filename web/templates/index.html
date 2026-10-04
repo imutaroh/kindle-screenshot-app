@@ -84,7 +84,9 @@
      必要な要素だけを描画する。実行中はフォームがDOM上に存在しないため、
      1秒ポーリング（hx-trigger="every 1s"）がフォーム入力値を巻き込む事故が
      原理的に起きない。GET /ui/start・GET /ui/status・POST /ui/stop・
-     GET /ui/reset の応答本体としてそのまま返される。 */}}
+     POST /ui/finish・GET /ui/reset の応答本体としてそのまま返される。
+     一時停止（.Paused）は実行中の一種で、ポーリングを続けたまま案内文を
+     目立たせ「終了してPDF作成」ボタンを出す。 */}}
 {{define "status-panel"}}<div id="statusArea"{{if .IsRunning}} hx-get="/ui/status" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
 {{if .ShowForm}}
     {{/* novalidate: required のブラウザ標準バリデーションは送信自体を止めて
@@ -130,6 +132,14 @@
                 <span class="switch-text">PDF作成後にPNGを自動削除</span>
             </label>
         </div>
+
+        <div class="form-group">
+            <label class="checkbox-label">
+                <input type="checkbox" id="autoCrop" name="auto_crop" {{if .AutoCrop}}checked{{end}}>
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                <span class="switch-text">余白を自動トリミング（PDFのみ。PNGはそのまま）</span>
+            </label>
+        </div>
     </form>
 {{else if .IsRunning}}
     <section class="card" id="progressSection">
@@ -143,9 +153,10 @@
                 <span id="progressPercent">{{.ProgressPctText}}</span>
             </div>
         </div>
-        <div class="message-box" id="messageBox">
-            <p id="messageText">{{.Message}}</p>
+        <div class="message-box{{if .Paused}} paused{{end}}" id="messageBox">
+            <p id="messageText">{{if .Paused}}⏸️ {{end}}{{.Message}}</p>
         </div>
+        {{if .Resolution}}<p class="resolution" id="resolution">🖼️ 解像度: {{.Resolution}}</p>{{end}}
     </section>
 
     <section class="card log-card">
@@ -158,6 +169,7 @@
         <div class="message-box{{if eq .BadgeClass "error"}} error{{end}}" id="messageBox">
             <p id="messageText">{{.Message}}</p>
         </div>
+        {{if .Resolution}}<p class="resolution" id="resolution">🖼️ 解像度: {{.Resolution}}</p>{{end}}
         {{if .OutputDir}}<p class="output-dir">📁 {{.OutputDir}}</p>{{end}}
     </section>
 
@@ -169,6 +181,7 @@
 
     <div class="button-group">
         {{if .ShowStartButton}}<button type="submit" form="captureForm" class="btn btn-primary" id="startButton">🚀 実行開始</button>{{end}}
+        {{if .ShowFinishButton}}<button type="button" id="finishButton" class="btn btn-primary" hx-post="/ui/finish" hx-target="#statusArea" hx-swap="outerHTML">📄 終了してPDF作成</button>{{end}}
         {{if .ShowStopButton}}<button type="button" id="stopButton" class="btn btn-danger" hx-post="/ui/stop" hx-target="#statusArea" hx-swap="outerHTML">⏹️ 停止</button>{{end}}
         {{if .ShowResetButton}}<button type="button" id="openFolderButton" class="btn btn-secondary" hx-post="/ui/open-folder" hx-swap="none">📂 保存先を開く</button>
         <button type="button" id="resetButton" class="btn btn-primary" hx-get="/ui/reset" hx-target="#statusArea" hx-swap="outerHTML">🔄 新しい本を撮る</button>{{end}}

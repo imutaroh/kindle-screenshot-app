@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/png"
 	"os"
+
+	"github.com/imutaroh/kindle-screenshot-app/internal/crop"
 )
 
 // imageData は1ページ分の画像を、PDFに埋め込める形（非圧縮のコンポーネントバイト列）に
@@ -27,16 +29,17 @@ type imageData struct {
 // screencapture が出力する画面全体のスクリーンショットは不透明（alpha=255固定）
 // であることを前提に、アルファチャンネルは保持せず RGB のみを埋め込む
 // （透過画像を想定した用途ではない）。
-func decodePNGForPDF(path string) (imageData, error) {
-	f, err := os.Open(path)
+//
+// rect が空でなければ、その範囲だけを crop.Apply（SubImage）で切り出して埋め込む。
+// SubImage は元の Pix を共有し、Pix の先頭が切り出し範囲の左上画素・Stride は元のまま
+// になるので、下の extract* 関数は切り出し前と同じ読み方で正しい画素を取り出せる。
+func decodePNGForPDF(path string, rect image.Rectangle) (imageData, error) {
+	img, err := loadPNG(path)
 	if err != nil {
 		return imageData{}, err
 	}
-	defer f.Close()
-
-	img, err := png.Decode(f)
-	if err != nil {
-		return imageData{}, fmt.Errorf("PNGデコード失敗 %s: %w", path, err)
+	if !rect.Empty() {
+		img = crop.Apply(img, rect)
 	}
 
 	b := img.Bounds()
@@ -65,6 +68,21 @@ func decodePNGForPDF(path string) (imageData, error) {
 		// （8bitの値cはGoの内部表現でc<<8|cに複製されるため、>>8で元に戻る）。
 		return imageData{w, h, 8, "DeviceRGB", extractRGBFallback(img)}, nil
 	}
+}
+
+// loadPNG は PNG ファイルをデコードする。
+func loadPNG(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	img, err := png.Decode(f)
+	if err != nil {
+		return nil, fmt.Errorf("PNGデコード失敗 %s: %w", path, err)
+	}
+	return img, nil
 }
 
 // extractRGB8 は 8bit/channel で R,G,B,A の順に並ぶ Pix から、A を除いた RGB のみを

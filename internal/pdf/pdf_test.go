@@ -128,10 +128,11 @@ func TestCreateFromDir_LosslessAndPageCount(t *testing.T) {
 		srcPaths = append(srcPaths, p)
 	}
 
-	created, err := CreateFromDir(dir, "テスト/本", 2) // 2枚ごとに分割 → part1,2,3
+	res, err := CreateFromDir(dir, "テスト/本", 2, Options{}) // 2枚ごとに分割 → part1,2,3
 	if err != nil {
 		t.Fatalf("CreateFromDir: %v", err)
 	}
+	created := res.Files
 
 	wantNames := []string{"テスト_本_part1.pdf", "テスト_本_part2.pdf", "テスト_本_part3.pdf"}
 	if len(created) != len(wantNames) {
@@ -183,21 +184,21 @@ func TestCreateFromDir_LosslessAndPageCount(t *testing.T) {
 
 func TestCreateFromDir_NoPNGs(t *testing.T) {
 	dir := t.TempDir()
-	created, err := CreateFromDir(dir, "空の本", 10)
+	res, err := CreateFromDir(dir, "空の本", 10, Options{Crop: true})
 	if err != nil {
 		t.Fatalf("CreateFromDir: %v", err)
 	}
-	if len(created) != 0 {
-		t.Errorf("PNGが無いのにPDFが生成されました: %v", created)
+	if len(res.Files) != 0 {
+		t.Errorf("PNGが無いのにPDFが生成されました: %v", res.Files)
 	}
 }
 
 func TestCreateFromDir_InvalidPagesPerPDF(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := CreateFromDir(dir, "本", 0); err == nil {
+	if _, err := CreateFromDir(dir, "本", 0, Options{}); err == nil {
 		t.Error("pagesPerPDF=0 はエラーになるべき")
 	}
-	if _, err := CreateFromDir(dir, "本", -1); err == nil {
+	if _, err := CreateFromDir(dir, "本", -1, Options{}); err == nil {
 		t.Error("pagesPerPDF=-1 はエラーになるべき")
 	}
 }

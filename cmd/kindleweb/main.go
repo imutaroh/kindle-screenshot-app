@@ -40,7 +40,7 @@ func main() {
 	fmt.Println("==================================================")
 	fmt.Printf("\n🌐 ブラウザで以下のURLにアクセスしてください:\n")
 	fmt.Printf("   http://localhost:%d\n", *port)
-	fmt.Println("\n⚠️  Kindleをフルスクリーンで表示してから実行してください。")
+	fmt.Println("\n⚠️  Kindleで本を開き、本文を1回クリックしてから開始してください。")
 	fmt.Println("==================================================")
 
 	log.Fatal(http.ListenAndServe(addr, srv.Handler()))

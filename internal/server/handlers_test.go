@@ -44,6 +44,124 @@ func TestHandleIndex_ReturnsFormDefaults(t *testing.T) {
 	if !strings.Contains(body, `id="autoDeletePng" name="auto_delete_png" checked`) {
 		t.Error("body does not include auto_delete_png checked by default")
 	}
+	if !strings.Contains(body, `id="autoCrop" name="auto_crop" checked`) {
+		t.Error("body does not include auto_crop checked by default")
+	}
+}
+
+func TestHandleUIStart_ValidationError_EchoesUncheckedAutoCrop(t *testing.T) {
+	srv := newTestServer(t)
+
+	// auto_crop を送らない＝チェックを外した。422 の再描画でも外れたままであること
+	form := url.Values{"book_name": {""}, "auto_delete_png": {"on"}}
+	req := httptest.NewRequest(http.MethodPost, "/ui/start", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, `name="auto_crop" checked`) {
+		t.Error("unchecked auto_crop was re-rendered as checked")
+	}
+	if !strings.Contains(body, `name="auto_delete_png" checked`) {
+		t.Error("checked auto_delete_png was not echoed back")
+	}
+}
+
+func TestHandleUIStatus_Paused_ShowsGuidanceAndFinishButton(t *testing.T) {
+	srv := newTestServer(t)
+	srv.mgr.SetStateForTest(session.State{
+		IsRunning:  true,
+		Status:     session.StatusPaused,
+		Message:    "ページが進みません。Kindle の本文を1回クリックしてください",
+		OutputDir:  t.TempDir(),
+		Resolution: "1720x1410px（1x）",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/status", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`class="status-badge paused"`,
+		`>一時停止<`,
+		`class="message-box paused"`,
+		"Kindle の本文を1回クリックしてください",
+		`id="finishButton"`,
+		`hx-post="/ui/finish"`,
+		`id="stopButton"`,
+		`hx-trigger="every 1s"`, // 一時停止中も自動再開を表示するためポーリングを続ける
+		"解像度: 1720x1410px（1x）",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("paused fragment does not include %q", want)
+		}
+	}
+}
+
+func TestHandleUIStatus_Running_HasNoFinishButton(t *testing.T) {
+	srv := newTestServer(t)
+	srv.mgr.SetRunningForTest(true)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/status", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if strings.Contains(rec.Body.String(), `id="finishButton"`) {
+		t.Error("finish button should only be shown while paused")
+	}
+}
+
+func TestHandleUIFinish_NotRunning_ReturnsCurrentPanel(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/finish", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="statusArea"`) || !strings.Contains(body, `id="captureForm"`) {
+		t.Errorf("finish while idle should return the idle form panel, got: %s", body)
+	}
+}
+
+func TestHandleUIFinish_Paused_ReturnsPanel(t *testing.T) {
+	srv := newTestServer(t)
+	srv.mgr.SetStateForTest(session.State{IsRunning: true, Status: session.StatusPaused, Message: "一時停止中"})
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/finish", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `id="statusArea"`) {
+		t.Error("body does not include #statusArea root")
+	}
+}
+
+func TestHandleIndex_ErrorBeforeOutputDir_ShowsResult(t *testing.T) {
+	srv := newTestServer(t)
+	// アクセシビリティ権限が無いなど、出力フォルダを作る前のエラー
+	srv.mgr.SetStateForTest(session.State{
+		Status:  session.StatusError,
+		Message: "エラー: アクセシビリティ権限がありません",
+		Error:   "アクセシビリティ権限がありません",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "アクセシビリティ権限がありません") || !strings.Contains(body, `id="resultSection"`) {
+		t.Error("an error without output dir should still be shown as a result")
+	}
 }
 
 func TestHandleUIStart_EmptyBookName_Returns422WithError(t *testing.T) {

@@ -35,29 +35,29 @@ func (s *Server) renderStatusPanel(w http.ResponseWriter, status int, sa statusA
 	s.tmpl.ExecuteTemplate(w, "status-panel", sa)
 }
 
-// parseStartForm は POST /ui/start のフォーム値を解釈する。max_pages /
+// parseStartForm は POST /ui/start のフォーム値を解釈する（本の名前以外）。max_pages /
 // pdf_pages_per_file が数値でない場合や direction が left/right 以外の場合は
 // 既定値にフォールバックする（Python版時代からブラウザ標準バリデーションに
-// 頼らずサーバ側で寛容に扱う挙動を踏襲）。
-func parseStartForm(r *http.Request) (maxPages, pdfPagesPerFile int, autoDeletePNG bool, direction capture.Direction) {
-	maxPages = session.DefaultMaxPages
+// 頼らずサーバ側で寛容に扱う挙動を踏襲）。チェックボックスは未チェックだと
+// 送信されないので、値の有無だけで ON/OFF を判定する。
+func parseStartForm(r *http.Request) formValues {
+	f := formValues{
+		MaxPages:        session.DefaultMaxPages,
+		PDFPagesPerFile: session.DefaultPDFPagesPerFile,
+		Direction:       string(session.DefaultDirection),
+		AutoDeletePNG:   r.FormValue("auto_delete_png") != "",
+		AutoCrop:        r.FormValue("auto_crop") != "",
+	}
 	if v, err := strconv.Atoi(r.FormValue("max_pages")); err == nil {
-		maxPages = v
+		f.MaxPages = v
 	}
-
-	pdfPagesPerFile = session.DefaultPDFPagesPerFile
 	if v, err := strconv.Atoi(r.FormValue("pdf_pages_per_file")); err == nil {
-		pdfPagesPerFile = v
+		f.PDFPagesPerFile = v
 	}
-
-	autoDeletePNG = r.FormValue("auto_delete_png") != ""
-
-	direction = session.DefaultDirection
 	if v := r.FormValue("direction"); v == string(capture.Left) || v == string(capture.Right) {
-		direction = capture.Direction(v)
+		f.Direction = v
 	}
-
-	return maxPages, pdfPagesPerFile, autoDeletePNG, direction
+	return f
 }
 
 // handleUIStart はキャプチャ処理を開始する。本の名前が空の場合は 422 を返し、
@@ -70,24 +70,25 @@ func (s *Server) handleUIStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	maxPages, pdfPagesPerFile, autoDeletePNG, direction := parseStartForm(r)
+	form := parseStartForm(r)
 
 	bookName := strings.TrimSpace(r.FormValue("book_name"))
 	if bookName == "" {
-		form := &formValues{
-			MaxPages:        maxPages,
-			PDFPagesPerFile: pdfPagesPerFile,
-			Direction:       string(direction),
-			AutoDeletePNG:   autoDeletePNG,
-		}
-		sa := buildStatusArea(s.mgr, true, "本の名前を入力してください", form)
+		sa := buildStatusArea(s.mgr, true, "本の名前を入力してください", &form)
 		s.renderStatusPanel(w, http.StatusUnprocessableEntity, sa)
 		return
 	}
 
 	// ErrAlreadyRunning はここでは無視する。既に実行中断片をそのまま返せば、
 	// htmx が #statusArea を現状の実行中表示に置き換えるだけで実害がない。
-	_ = s.mgr.Start(bookName, maxPages, pdfPagesPerFile, autoDeletePNG, direction)
+	_ = s.mgr.Start(session.Settings{
+		BookName:        bookName,
+		MaxPages:        form.MaxPages,
+		PDFPagesPerFile: form.PDFPagesPerFile,
+		AutoDeletePNG:   form.AutoDeletePNG,
+		AutoCrop:        form.AutoCrop,
+		Direction:       capture.Direction(form.Direction),
+	})
 
 	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, "", nil))
 }
@@ -105,9 +106,17 @@ func (s *Server) handleUIStop(w http.ResponseWriter, r *http.Request) {
 	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, "", nil))
 }
 
+// handleUIFinish は「終了してPDF作成」ボタン用（主に一時停止中に表示される）。
+// 撮影を止めてそこまでのページで PDF を作る要求を送る。handleUIStop と同じく
+// 未実行時のエラーは無視し、現在の断片を返す。
+func (s *Server) handleUIFinish(w http.ResponseWriter, r *http.Request) {
+	_ = s.mgr.Finish()
+	s.renderStatusPanel(w, http.StatusOK, buildStatusArea(s.mgr, true, "", nil))
+}
+
 // handleUIReset は「新しい本を撮る」ボタン用。Manager の状態（完了/エラー/
 // 中断の結果）は一切変更せず、表示だけを待機中のフォーム状態に戻す。
-// PDF結合枚数・めくり方向・PNG自動削除は前回の入力値を引き継ぎ、本の名前と
+// PDF結合枚数・めくり方向・PNG自動削除・余白トリミングは前回の入力値を引き継ぎ、本の名前と
 // 最大ページ数は新しい本のキャプチャに向けて初期値に戻す。
 func (s *Server) handleUIReset(w http.ResponseWriter, r *http.Request) {
 	st := s.mgr.Snapshot()
@@ -116,6 +125,7 @@ func (s *Server) handleUIReset(w http.ResponseWriter, r *http.Request) {
 		PDFPagesPerFile: st.PDFPagesPerFile,
 		Direction:       st.Direction,
 		AutoDeletePNG:   st.AutoDeletePNG,
+		AutoCrop:        st.AutoCrop,
 	}
 	sa := statusAreaData{
 		OOB:             true,
@@ -127,6 +137,7 @@ func (s *Server) handleUIReset(w http.ResponseWriter, r *http.Request) {
 		PDFPagesPerFile: form.PDFPagesPerFile,
 		Direction:       form.Direction,
 		AutoDeletePNG:   form.AutoDeletePNG,
+		AutoCrop:        form.AutoCrop,
 	}
 	s.renderStatusPanel(w, http.StatusOK, sa)
 }

@@ -37,6 +37,10 @@ type statusAreaData struct {
 	BadgeLabel string
 	BadgeClass string
 
+	// Paused: 実行中のうち、ページが進まず一時停止している状態（IsRunning も true）。
+	// 案内文を目立たせ、「終了してPDF作成」ボタンを出す。
+	Paused bool
+
 	// ShowForm: 待機中（実行中でなく結果もない）、またはバリデーションエラー時。
 	ShowForm bool
 	// ShowResult: 完了/エラー/中断など、実行済みの結果がある状態。
@@ -51,6 +55,7 @@ type statusAreaData struct {
 	PDFPagesPerFile int
 	Direction       string
 	AutoDeletePNG   bool
+	AutoCrop        bool
 
 	Indeterminate   bool
 	ProgressPct     int
@@ -59,10 +64,13 @@ type statusAreaData struct {
 
 	Message   string
 	OutputDir string
+	// Resolution: 1ページ目から求めた解像度（例: "1720x1410px（1x）"）。未取得なら空。
+	Resolution string
 
-	ShowStartButton bool
-	ShowStopButton  bool
-	ShowResetButton bool
+	ShowStartButton  bool
+	ShowStopButton   bool
+	ShowFinishButton bool
+	ShowResetButton  bool
 
 	// ValidationError is set only for the 422 response to POST /ui/start
 	// when the book name is empty. It is shown inline next to the book name
@@ -93,11 +101,15 @@ func buildStatusArea(mgr *session.Manager, oob bool, validationError string, for
 		IsRunning:       st.IsRunning,
 		Message:         st.Message,
 		OutputDir:       st.OutputDir,
+		Resolution:      st.Resolution,
 		BookName:        st.BookName,
 		ValidationError: validationError,
+		Paused:          st.IsRunning && st.Status == session.StatusPaused,
 	}
 
 	switch {
+	case sa.Paused:
+		sa.BadgeLabel, sa.BadgeClass = "一時停止", "paused"
 	case st.IsRunning:
 		sa.BadgeLabel, sa.BadgeClass = "実行中", "running"
 	case st.Status == session.StatusDone:
@@ -111,8 +123,11 @@ func buildStatusArea(mgr *session.Manager, oob bool, validationError string, for
 	// 3状態は排他的かつ網羅的: 実行中 → 結果あり（完了/エラー/中断） → それ以外はフォーム。
 	// 中断（停止ボタン）は runWorker が status を StatusIdle に戻すため、
 	// StatusDone/StatusError では判定できない。OutputDir と Message の両方が
-	// 埋まっていることを「一度でも実行された」印として使う。
-	sa.ShowResult = validationError == "" && !st.IsRunning && st.OutputDir != "" && st.Message != ""
+	// 埋まっていることを「一度でも実行された」印として使う。ただしエラーは
+	// 出力フォルダを作る前（アクセシビリティ権限の確認など）にも起きるので、
+	// StatusError なら OutputDir が空でも結果として表示する（フォームに戻すと案内が消える）。
+	ran := st.OutputDir != "" || st.Status == session.StatusError
+	sa.ShowResult = validationError == "" && !st.IsRunning && ran && st.Message != ""
 	sa.ShowForm = validationError != "" || (!st.IsRunning && !sa.ShowResult)
 
 	if sa.ShowForm {
@@ -122,11 +137,13 @@ func buildStatusArea(mgr *session.Manager, oob bool, validationError string, for
 			sa.PDFPagesPerFile = form.PDFPagesPerFile
 			sa.Direction = form.Direction
 			sa.AutoDeletePNG = form.AutoDeletePNG
+			sa.AutoCrop = form.AutoCrop
 		} else {
 			sa.MaxPages = session.DefaultMaxPages
 			sa.PDFPagesPerFile = st.PDFPagesPerFile
 			sa.Direction = st.Direction
 			sa.AutoDeletePNG = st.AutoDeletePNG
+			sa.AutoCrop = st.AutoCrop
 		}
 	}
 
@@ -155,6 +172,7 @@ func buildStatusArea(mgr *session.Manager, oob bool, validationError string, for
 
 	sa.ShowStartButton = sa.ShowForm
 	sa.ShowStopButton = st.IsRunning
+	sa.ShowFinishButton = sa.Paused
 	sa.ShowResetButton = sa.ShowResult
 
 	if sa.IsRunning || sa.ShowResult {
@@ -178,4 +196,5 @@ type formValues struct {
 	PDFPagesPerFile int
 	Direction       string
 	AutoDeletePNG   bool
+	AutoCrop        bool
 }

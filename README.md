@@ -6,8 +6,8 @@ Kindle for Mac の全ページを自動スクリーンショットする Web ア
 ## 設計方針
 
 - **pure Go**（CGo なし）。macOS 操作は標準コマンドに逃がす
-  - スクショ: `screencapture -x -m`（メインディスプレイのみ・無音）
-  - ページ送り・Kindle前面化: `osascript`（AppleScript）
+  - スクショ: `screencapture -l <ウィンドウID>`（Kindle ウィンドウ単体・背面や別ディスプレイでも撮れる）
+  - ページ送り: `osascript`（JXA）から `CGEventPostToPid` で Kindle のプロセスへキーを直送（前面化しない）
 - `go build` 一発で単一バイナリ。venv も依存セットアップも不要
 
 ## フェーズ計画
@@ -15,6 +15,7 @@ Kindle for Mac の全ページを自動スクリーンショットする Web ア
 - [x] **① CLI**: スクショ → ページ送り → pHash 自動停止（後に Web UI へ一本化し CLI は廃止）
 - [x] **② PDF結合**: 自前の最小PDFライター（`internal/pdf`）で PNG → PDF
 - [x] **③ Web UI**: `net/http` + `embed` で Python 版の Web UI を移植
+- [x] **④ 取り込みの信頼性と画質**: 画素差分による変化判定、キー不感時の一時停止と自動再開、PDF の余白自動トリミング
 
 ## 使い方
 
@@ -35,7 +36,7 @@ go build -o kindleweb ./cmd/kindleweb
 ```
 
 起動したら `http://localhost:5001` をブラウザで開く。本の名前・最大ページ数・PDF結合枚数・
-ページめくり方向・PNG自動削除を画面から設定して実行できる。
+ページめくり方向・PNG自動削除・余白の自動トリミングを画面から設定して実行できる。
 
 フラグ:
 
@@ -45,6 +46,30 @@ go build -o kindleweb ./cmd/kindleweb
 ```bash
 ./kindleweb -port 8080 -out ~/Documents/kindle-books
 ```
+
+## 取り込みの運用チェックリスト
+
+取り込みが途中で止まる・画質が落ちる原因の多くは Kindle 側の状態にある。開始前と取り込み中に次を守る。
+
+**開始前**
+
+- [ ] Kindle で本を開き、**ページ本文を1回クリック**しておく（Kindle は起動直後にバックグラウンドのキーを受け付けないことがある）
+- [ ] **Page Flip 表示やツールバー・スライダーが出ていない**状態にする（写り込むと余白トリミングが効かなくなる）
+- [ ] 画質を上げたいなら、Kindle を **Retina / HiDPI ディスプレイ**（MacBook 内蔵画面など）に置き、Kindle の**文字サイズを上げる**
+  - 画素数はディスプレイで決まり、コードでは増やせない。1x のディスプレイで撮ると、ログに「画質注意」が出る（解像度は進捗画面にも表示される）
+
+**取り込み中**
+
+- [ ] **マウスを Kindle のウィンドウに乗せない**（乗せるとキーを受け付けなくなることがある）
+  - できれば Kindle を別の Space か別のディスプレイに置いておく
+- [ ] **Kindle のウィンドウを動かしたり、大きさを変えたりしない**（ディスプレイ間を移すとページの組み直しで表示位置が変わる）
+- [ ] 他のアプリでの作業（⌘ を使うショートカットを含む）はしてよい。修飾キーは Kindle に漏れないようにしてある
+- [ ] 本の最後の「レビュー・おすすめ」画面ではキーが効かない。そこで一時停止したら、最後の画面を外して「終了してPDF作成」を押す
+- [ ] 「一時停止」になったら、**Kindle のページ本文を1回クリック**する。キー受付が戻ると自動で再開する
+  - 本の最後まで撮り終えて一時停止した場合は、「終了してPDF作成」を押す
+  - 一時停止のまま15分たつと、そこまでのページで PDF を作って終了する
+
+停止ボタンで中断した場合やエラーで止まった場合も、撮れたページが1枚以上あればそこまでの PDF を作る。
 
 ## 必要な権限（初回のみ）
 
@@ -56,22 +81,25 @@ go build -o kindleweb ./cmd/kindleweb
 - **アクセシビリティ**（ページ送りのキー送信用）
 
 Apple 署名済みのターミナルアプリ自体に権限を紐付けるため、アプリを再ビルドしても許可が外れることはない。
+アクセシビリティ権限が無い場合は、取り込み開始時にエラーとして案内が出る。
 
 ## テスト
 
 ```bash
-go test ./...                                        # ユニットテスト
-KINDLESNAP_SMOKE=1 go test ./internal/capture/ -v    # 実際に画面をキャプチャするスモークテスト
+go test ./...                                              # ユニットテスト
+KINDLESNAP_SMOKE=1 go test ./internal/capture/ -v          # 実際に画面をキャプチャするスモークテスト
+KINDLESNAP_SMOKE_KEYS=1 go test ./internal/capture/ -run TurnPage -v  # 実際にページを送るスモークテスト（読書位置が動く）
 ```
 
 ## 構成
 
 ```
 cmd/kindleweb/      # Web UI サーバーのエントリーポイント（-port / -out フラグ）
-internal/capture/   # screencapture / osascript のラッパー（マウス座標・画面サイズ取得も含む）
-internal/dedupe/    # pHash による同一ページ判定（自動停止用）
+internal/capture/   # screencapture / osascript のラッパー（ウィンドウ発見・ページ送り・権限確認・通知）
+internal/frame/     # 画素差分による画面の変化・安定の判定（ページ送りが効いたか）
+internal/crop/      # ウィンドウ画像の余白・タイトルバーを切り落とす矩形の検出
 internal/output/    # 出力フォルダの連番作成（上書き防止）
-internal/pdf/       # 連番PNG → PDF結合（自前の最小PDFライター）
+internal/pdf/       # 連番PNG → PDF結合（自前の最小PDFライター。余白トリミング対応）
 internal/session/   # Web UI 用キャプチャワーカー（状態管理・進捗）
 internal/server/    # Web UI の HTTP ルーティング（net/http のみ、フレームワーク不使用）
 web/                # Web UI の静的資産（HTML/CSS/JS）を go:embed でバイナリに同梱
