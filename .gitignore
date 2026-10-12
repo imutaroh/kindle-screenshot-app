@@ -53,7 +53,7 @@ output/
 
 # Go ビルド成果物
 /kindlesnap
-/kindleweb
+.bin/
 
 # Claude Code worktree
 .claude/worktrees/
