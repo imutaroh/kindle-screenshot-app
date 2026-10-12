@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -37,11 +36,12 @@ var kindleAppNames = []string{"Kindle", "Amazon Kindle"}
 // Kindle は Kindle アプリへの操作をまとめた型。
 // ウィンドウ発見（Discover）で得た情報をキャッシュし、2回目以降の試行を減らす。
 type Kindle struct {
-	appName  string  // 発見できたアプリ名（"Kindle" / "Amazon Kindle"。未発見なら空文字）
-	pid      int     // Kindle アプリのプロセスID（0 = 未発見）
-	windowID int     // キャプチャ対象のウィンドウID（0 = 未発見）
-	width    float64 // 発見時のウィンドウ幅（ポイント単位。ログ・診断・解像度の倍率計算用）
-	height   float64 // 発見時のウィンドウ高さ（ログ・診断用）
+	appName  string     // 発見できたアプリ名（"Kindle" / "Amazon Kindle"。未発見なら空文字）
+	pid      int        // Kindle アプリのプロセスID（0 = 未発見）
+	windowID int        // キャプチャ対象のウィンドウID（0 = 未発見）
+	width    float64    // 発見時のウィンドウ幅（ポイント単位。ログ・診断・解像度の倍率計算用）
+	height   float64    // 発見時のウィンドウ高さ（ログ・診断用）
+	info     WindowInfo // 発見時のウィンドウ情報の全体（位置・OnScreen。Info で返す）
 
 	// onRediscover はウィンドウ再発見（本の開き直し等でwindowIDが変わった）時に
 	// 呼ばれるコールバック。capture パッケージ自体はロガーを持たない設計にして
@@ -191,7 +191,7 @@ func CheckAccessibility() error {
 	}
 	if out != "true" {
 		return fmt.Errorf("アクセシビリティ権限がありません。システム設定 > プライバシーとセキュリティ > アクセシビリティ で、" +
-			"kindleweb を起動したターミナルアプリ（Terminal / iTerm / Ghostty など）を許可してから、ターミナルを再起動してやり直してください")
+			"kindlesnap を起動したターミナルアプリ（Terminal / iTerm / Ghostty など）を許可してから、ターミナルを再起動してやり直してください")
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (k *Kindle) captureWindow(path string) error {
 
 	// -l: ウィンドウ単体を指定（背面・別ディスプレイでも撮れる）
 	// -o: ウィンドウの影を付けない / -x: シャッター音を鳴らさない
-	out, err := exec.Command("screencapture", "-l", strconv.Itoa(k.windowID), "-o", "-x", path).CombinedOutput()
+	out, err := exec.Command("screencapture", screencaptureArgs(k.windowID, path)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("screencaptureに失敗しました（画面収録権限を確認）: %w: %s",
 			err, strings.TrimSpace(string(out)))

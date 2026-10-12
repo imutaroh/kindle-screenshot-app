@@ -15,6 +15,9 @@ import (
 //
 // ObjC.castRefToObject を挟んでいるのは、挟まないと
 // ObjC.deepUnwrap が undefined になる罠を実機で踏んだため。削除しない。
+//
+// kCGWindowIsOnscreen は画面に表示されていないウィンドウ（別 Space・最小化）では
+// キー自体が辞書に無い（undefined）ので、!! で false に揃える。
 const windowListScript = `
 ObjC.import("CoreGraphics");
 const ref = $.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, $.kCGNullWindowID);
@@ -24,6 +27,7 @@ JSON.stringify(arr.map(w => ({
   pid: w.kCGWindowOwnerPID,
   windowID: w.kCGWindowNumber,
   layer: w.kCGWindowLayer,
+  onscreen: !!w.kCGWindowIsOnscreen,
   x: w.kCGWindowBounds.X,
   y: w.kCGWindowBounds.Y,
   width: w.kCGWindowBounds.Width,
@@ -32,11 +36,17 @@ JSON.stringify(arr.map(w => ({
 `
 
 // WindowInfo は CGWindowListCopyWindowInfo から得た1ウィンドウ分の情報。
+// X / Y / Width / Height はポイント単位のグローバル座標（メインディスプレイの左上が原点、
+// 下向きが +Y）。CGEventPost のマウス座標と同じ座標系なので、Click にそのまま使える。
 type WindowInfo struct {
-	Owner    string  `json:"owner"`
-	PID      int     `json:"pid"`
-	WindowID int     `json:"windowID"`
-	Layer    int     `json:"layer"`
+	Owner    string `json:"owner"`
+	PID      int    `json:"pid"`
+	WindowID int    `json:"windowID"`
+	Layer    int    `json:"layer"`
+	// OnScreen は今の Space で画面に表示されているか。別 Space・最小化なら false。
+	// 撮影対象の選定には使わない（別 Space の通常ウィンドウも screencapture -l で撮れるため）。
+	// doctor が「フルスクリーンで別 Space にある」などの状態を案内するための診断情報。
+	OnScreen bool    `json:"onscreen"`
 	X        float64 `json:"x"`
 	Y        float64 `json:"y"`
 	Width    float64 `json:"width"`
@@ -126,7 +136,15 @@ func (k *Kindle) Discover() error {
 	k.windowID = w.WindowID
 	k.width = w.Width
 	k.height = w.Height
+	k.info = w
 	return nil
+}
+
+// Info は直近の Discover で選んだウィンドウの情報を返す（未発見ならゼロ値で WindowID=0）。
+// 位置（X/Y）と OnScreen は発見した時点の値で、その後ウィンドウを動かしても更新されない。
+// 最新の位置が要るとき（Click の座標変換など）は直前に Discover し直すこと。
+func (k *Kindle) Info() WindowInfo {
+	return k.info
 }
 
 // ensure は windowID が未確定の場合にのみ Discover を実行する。

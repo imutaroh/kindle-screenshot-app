@@ -1,14 +1,17 @@
-// Package session は Web UI 版のキャプチャワーカーを管理する。
-// Python 版 src/server.py の capture_worker + CaptureState の Go 移植。
+// Package session はキャプチャワーカー（撮影 → PDF 作成）を管理する。
+// もとは Python 版 src/server.py の capture_worker + CaptureState の Go 移植。
 //
 // Manager はミューテックスで保護された状態を持ち、Start でバックグラウンド
-// goroutine を起動してキャプチャ〜PDF結合までを進める。GET /ui/status はこの
-// 状態をポーリングで読み取るだけの薄いハンドラになる（internal/server が担当）。
+// goroutine を起動してキャプチャ〜PDF結合までを進める。
+// CLI（cmd/kindlesnap）はポーリングせず、OnLog / OnState フックで変化を受け取り、
+// Run（Start して終わるまで待つ）で同期的に使う。
 package session
 
 import (
 	"errors"
 	"fmt"
+	"image"
+	"slices"
 	"sync"
 	"time"
 
@@ -18,7 +21,7 @@ import (
 )
 
 // ステータス文字列。Python 版 src/server.py の CaptureState.status と一字一句同じ日本語文字列。
-// internal/server のテンプレートはバッジ表示にこの値をそのまま使う。
+// 人が読む表示用の値で、CLI はこれを英語の安定した値（running / paused など）に変換して出す。
 const (
 	StatusIdle    = "待機中"
 	StatusRunning = "実行中"
@@ -30,7 +33,7 @@ const (
 	StatusPaused = "一時停止"
 )
 
-// デフォルト設定値。Python 版 src/config.py と同じ値。GET / の設定フォーム初期値はこれらをそのまま使う。
+// デフォルト設定値。Python 版 src/config.py と同じ値。CLI のフラグの既定値もこれらを使う。
 const (
 	DefaultStartDelay          = 5 * time.Second
 	DefaultPDFPagesPerFile     = 50
@@ -44,7 +47,7 @@ const (
 	// ページ送り直後、スクショが「前ページと変わった（frame.ChangedFrac 超）」かつ
 	// 「直前のポーリングと同じ＝描画が止まって安定した（frame.StableFrac 以下）」と
 	// 判定できるまで DefaultPollInterval 間隔でポーリングする（internal/session/worker.go の
-	// captureSettled）。設定はUIに出さない固定パラメータ。
+	// captureSettled）。設定は CLI のフラグに出さない固定パラメータ。
 	DefaultPollInterval = 150 * time.Millisecond
 	// DefaultSettleTimeout は通常ページの安定待ちタイムアウト。変化したのに安定しないまま
 	// これに達したら1回だけ同じ長さ延長し、それでも安定しなければ最後の1枚を採用する。
@@ -75,12 +78,6 @@ const (
 	DefaultCaptureFailWindow = 5 * time.Second
 	minCaptureFailures       = 3
 
-	// DefaultAutoDeletePNG はPDF作成後にPNGを自動削除する設定の初期値。
-	DefaultAutoDeletePNG = true
-
-	// DefaultAutoCrop はPDF作成時に余白を自動トリミングする設定の初期値。
-	DefaultAutoCrop = true
-
 	// maxLogEntries はログ履歴のリングバッファ上限。
 	maxLogEntries = 200
 )
@@ -88,13 +85,32 @@ const (
 // DefaultDirection は既定のページめくり方向（日本語の本＝右綴じ）。
 const DefaultDirection = capture.Left
 
+// EndReason は取り込みがどう終わったかを表す（CLI の状態表示・終了コードの判断用）。
+// Status（日本語の表示用文字列）だけでは「中断」が StatusIdle に畳まれて区別できず、
+// 「一時停止の時間切れ」も StatusDone に含まれるため、終わり方を別の値で明示する。
+type EndReason string
+
+const (
+	// EndNone はまだ終わっていない（実行中、または一度も実行していない）。
+	EndNone EndReason = ""
+	// EndDone は正常に完了した（最大ページ数到達、または Finish による終了）。
+	EndDone EndReason = "done"
+	// EndInterrupted は Stop で中断された（撮れたページがあれば PDF は作ってある）。
+	EndInterrupted EndReason = "interrupted"
+	// EndError はエラーで終わった（撮れたページがあれば PDF は作ってある）。
+	EndError EndReason = "error"
+	// EndPauseTimeout は一時停止が DefaultPauseLimit 続いたため、そこまでのページで完了にした。
+	// 最終ページまで撮れたかは確認できていない。
+	EndPauseTimeout EndReason = "pause-timeout"
+)
+
 // ErrAlreadyRunning は実行中に Start を呼んだ場合に返る。
 var ErrAlreadyRunning = errors.New("既に実行中です")
 
 // ErrNotRunning は未実行時に Stop / Finish を呼んだ場合に返る。
 var ErrNotRunning = errors.New("実行中ではありません")
 
-// Settings は Start に渡す取り込み設定（Web UI の設定フォームの値）。
+// Settings は Start に渡す取り込み設定（CLI では kindlesnap capture のフラグから作る）。
 type Settings struct {
 	BookName        string
 	MaxPages        int // 0 = 無制限
@@ -102,38 +118,44 @@ type Settings struct {
 	AutoDeletePNG   bool
 	AutoCrop        bool // PDF作成時に余白を自動トリミングする（PNG自体は書き換えない）
 	Direction       capture.Direction
+
+	// DeferPNGDelete が true なら、AutoDeletePNG でも finalize（PDF作成）の中では PNG を削除しない。
+	// CLI は PDF の後に PNG から Markdown を作るので、削除は呼び出し側が Markdown の後に
+	// 自分で行う（pdf.DeletePNGs）。AutoDeletePNG は「最終的に消すか」というユーザーの意図、
+	// DeferPNGDelete は「誰がいつ消すか」で、役割を分けている。
+	DeferPNGDelete bool
 }
 
-// State は GET /ui/status が返す値のスナップショット（呼び出し時点のコピー）。
+// State は Manager の状態のスナップショット（呼び出し時点のコピー）。
 type State struct {
 	IsRunning   bool
 	CurrentPage int
 	TotalPages  int
 	Status      string
 	Message     string
-	OutputDir   string // 未設定なら空文字（Python版の None 相当。HTML化はserver側の責務）
+	OutputDir   string // 未設定なら空文字（Python版の None 相当）
 	Error       string // 未設定なら空文字（Python版の None 相当）
 
 	// BookName は現在実行中、または直近に実行した本の名前。
-	// 実行中・結果表示（完了/エラー/中断）カードの「対象の本」表示に使う。
 	BookName string
 
 	// Resolution は1ページ目の撮影結果から求めた解像度の表示用文字列
 	// （例: "1720x1410px（1x）"）。未取得なら空文字。
 	Resolution string
 
-	// 以下5つは直近の Start 呼び出しで使われた設定値（未実行なら初期値）。
-	// 設定フォームの初期値の埋め戻し（GET / や GET /ui/reset）に使う。
-	MaxPages        int
-	PDFPagesPerFile int
-	Direction       string
-	AutoDeletePNG   bool
-	AutoCrop        bool
+	// EndReason は直近の取り込みの終わり方。実行中・未実行なら EndNone。
+	EndReason EndReason
+
+	// PDFFiles は直近の取り込みで作った PDF のパス（作成順）。まだ作っていなければ nil。
+	// エラーや中断で終わった場合も、撮れたページから PDF を作れていれば入る。
+	PDFFiles []string
+
+	// CropRect は PDF 作成時に適用した余白トリミングの切り出し矩形（ページ画像の画素座標）。
+	// トリミングしなかった（AutoCrop=false、または安全側に倒して適用しなかった）なら空。
+	CropRect image.Rectangle
 }
 
-// LogEntry はキャプチャ処理中にサーバー側で記録した1件のログ。
-// 以前は web/static/script.js がステータスポーリングの差分からクライアント側で
-// 生成していたログを、サーバー側で一元的に記録するようにしたもの。
+// LogEntry はキャプチャ処理中に記録した1件のログ。
 type LogEntry struct {
 	Time  time.Time
 	Level string // "info" | "success" | "error"
@@ -146,8 +168,8 @@ type Manager struct {
 
 	mu           sync.Mutex
 	isRunning    bool
-	shouldStop   bool // 停止ボタン（中断。撮れたページがあれば PDF は作る）
-	shouldFinish bool // 「終了してPDF作成」ボタン（そこまでのページで完了にする）
+	shouldStop   bool // 中断の要求（kindlesnap stop / Ctrl-C。撮れたページがあれば PDF は作る）
+	shouldFinish bool // 終了の要求（kindlesnap finish。そこまでのページで完了にする）
 	currentPage  int
 	totalPages   int
 	status       string
@@ -157,15 +179,13 @@ type Manager struct {
 	err          string
 	resolution   string
 	logs         []LogEntry
+	endReason    EndReason
+	pdfFiles     []string
+	cropRect     image.Rectangle
 
-	// 直近の Start 呼び出しで使われた設定値。未実行時は下記デフォルト値のまま。
-	// GET / や GET /ui/reset の設定フォーム初期値埋め戻しに使う（PDF結合枚数・
-	// めくり方向・PNG自動削除は本をまたいで「前回の入力値」として引き継ぐ設計）。
-	maxPages        int
-	pdfPagesPerFile int
-	direction       capture.Direction
-	autoDeletePNG   bool
-	autoCrop        bool
+	// done は直近の Start で起動したワーカーが終わったら close されるチャネル（Wait 用）。
+	// 未実行なら nil。
+	done chan struct{}
 
 	// timing は待ち時間のパラメータ。NewManager で Default* の値が入る。
 	// ユニットテストが短い値に差し替えるためだけに構造体にまとめている。
@@ -173,6 +193,18 @@ type Manager struct {
 
 	// notify は一時停止時の macOS 通知。テストでは何もしない関数に差し替える。
 	notify func(title, message string)
+
+	// OnLog はログが1件記録されるたびに呼ばれる（nil なら呼ばない）。
+	// OnState は状態（ステータス・メッセージ・ページ数など）が変わるたびに、変更後の
+	// スナップショットを渡して呼ばれる（nil なら呼ばない）。
+	//
+	// CLI がポーリングせずに JSON Lines を流すためのフック。どちらもミューテックスを
+	// 外してから呼ぶので、フックの中で Snapshot / Logs / Stop / Finish を呼んでも
+	// デッドロックしない。ただしワーカー goroutine から同期的に呼ぶので、重い処理を
+	// すると撮影がその分遅れる。Start より前に設定し、実行中に書き換えないこと
+	// （実行中の書き換えはデータ競合になる）。
+	OnLog   func(LogEntry)
+	OnState func(State)
 }
 
 // timing は captureLoop が使う待ち時間の一式。
@@ -201,14 +233,9 @@ func defaultTiming() timing {
 // NewManager は出力先ルートフォルダ outRoot を紐付けた Manager を作る。
 func NewManager(outRoot string) *Manager {
 	return &Manager{
-		outRoot:         outRoot,
-		status:          StatusIdle,
-		maxPages:        DefaultMaxPages,
-		pdfPagesPerFile: DefaultPDFPagesPerFile,
-		direction:       DefaultDirection,
-		autoDeletePNG:   DefaultAutoDeletePNG,
-		autoCrop:        DefaultAutoCrop,
-		timing:          defaultTiming(),
+		outRoot: outRoot,
+		status:  StatusIdle,
+		timing:  defaultTiming(),
 		notify: func(title, message string) {
 			_ = capture.Notify(title, message) // 通知は補助なので失敗しても無視する
 		},
@@ -222,37 +249,47 @@ func (m *Manager) IsRunning() bool {
 	return m.isRunning
 }
 
-// Snapshot は現在の状態のコピーを返す（GET /ui/status 用）。
+// Snapshot は現在の状態のコピーを返す。
 func (m *Manager) Snapshot() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return State{
-		IsRunning:       m.isRunning,
-		CurrentPage:     m.currentPage,
-		TotalPages:      m.totalPages,
-		Status:          m.status,
-		Message:         m.message,
-		OutputDir:       m.outputDir,
-		Error:           m.err,
-		BookName:        m.bookName,
-		Resolution:      m.resolution,
-		MaxPages:        m.maxPages,
-		PDFPagesPerFile: m.pdfPagesPerFile,
-		Direction:       string(m.direction),
-		AutoDeletePNG:   m.autoDeletePNG,
-		AutoCrop:        m.autoCrop,
+		IsRunning:   m.isRunning,
+		CurrentPage: m.currentPage,
+		TotalPages:  m.totalPages,
+		Status:      m.status,
+		Message:     m.message,
+		OutputDir:   m.outputDir,
+		Error:       m.err,
+		BookName:    m.bookName,
+		Resolution:  m.resolution,
+		EndReason:   m.endReason,
+		PDFFiles:    slices.Clone(m.pdfFiles), // 呼び出し側が書き換えても内部状態に響かないようにコピー
+		CropRect:    m.cropRect,
+	}
+}
+
+// emitState は OnState フックに現在のスナップショットを渡す。
+// 必ずミューテックスを外した状態で呼ぶこと（Snapshot が内部でロックを取るため）。
+func (m *Manager) emitState() {
+	if m.OnState != nil {
+		m.OnState(m.Snapshot())
 	}
 }
 
 // addLog はログ履歴に1件追記する。上限 maxLogEntries を超えたら古いものから捨てる。
 // Start() を跨いでも履歴はリセットされず、アプリ起動中は蓄積し続ける。
 func (m *Manager) addLog(level, text string) {
+	e := LogEntry{Time: time.Now(), Level: level, Text: text}
 	m.mu.Lock()
-	m.logs = append(m.logs, LogEntry{Time: time.Now(), Level: level, Text: text})
+	m.logs = append(m.logs, e)
 	if len(m.logs) > maxLogEntries {
 		m.logs = append([]LogEntry(nil), m.logs[len(m.logs)-maxLogEntries:]...)
 	}
 	m.mu.Unlock()
+	if m.OnLog != nil {
+		m.OnLog(e)
+	}
 }
 
 // Logs は記録済みログ履歴のコピーを古い順に返す。
@@ -262,35 +299,6 @@ func (m *Manager) Logs() []LogEntry {
 	out := make([]LogEntry, len(m.logs))
 	copy(out, m.logs)
 	return out
-}
-
-// SetRunningForTest は internal/server のハンドラテストが「実行中」状態のレンダリングを
-// 検証するためだけに使うテスト専用フック。実際のキャプチャ処理は一切走らない。
-// プロダクションコードから呼んではならない。
-func (m *Manager) SetRunningForTest(running bool) {
-	m.mu.Lock()
-	m.isRunning = running
-	if running {
-		m.status = StatusRunning
-	}
-	m.mu.Unlock()
-}
-
-// SetStateForTest は internal/server のハンドラテストが任意の状態（一時停止・解像度表示など）の
-// レンダリングを検証するためだけに使うテスト専用フック。st のうち IsRunning / CurrentPage /
-// Status / Message / OutputDir / Error / BookName / Resolution だけを反映する。
-// プロダクションコードから呼んではならない。
-func (m *Manager) SetStateForTest(st State) {
-	m.mu.Lock()
-	m.isRunning = st.IsRunning
-	m.currentPage = st.CurrentPage
-	m.status = st.Status
-	m.message = st.Message
-	m.outputDir = st.OutputDir
-	m.err = st.Error
-	m.bookName = st.BookName
-	m.resolution = st.Resolution
-	m.mu.Unlock()
 }
 
 // Start はバックグラウンド goroutine でキャプチャ処理を開始する。
@@ -312,14 +320,37 @@ func (m *Manager) Start(s Settings) error {
 	m.outputDir = ""
 	m.resolution = ""
 	m.bookName = s.BookName
-	m.maxPages = s.MaxPages
-	m.pdfPagesPerFile = s.PDFPagesPerFile
-	m.direction = s.Direction
-	m.autoDeletePNG = s.AutoDeletePNG
-	m.autoCrop = s.AutoCrop
+	m.endReason = EndNone
+	m.pdfFiles = nil
+	m.cropRect = image.Rectangle{}
+	m.done = make(chan struct{})
 	m.mu.Unlock()
 
+	// ワーカーを起動する前に通知するので、OnState が呼び出し元と
+	// ワーカーの2つの goroutine から同時に呼ばれることはない。
+	m.emitState()
 	go m.runWorker(s)
+	return nil
+}
+
+// Wait は直近の Start で始めた取り込みが終わる（PDF 作成まで済む）まで待つ。
+// 一度も Start していなければすぐに返る。
+func (m *Manager) Wait() {
+	m.mu.Lock()
+	done := m.done
+	m.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+}
+
+// Run は Start して、終わるまで待つ同期版（CLI 用）。終わり方は Snapshot().EndReason で見る。
+// 待っている間も別の goroutine（シグナルハンドラなど）から Stop / Finish を呼べる。
+func (m *Manager) Run(s Settings) error {
+	if err := m.Start(s); err != nil {
+		return err
+	}
+	m.Wait()
 	return nil
 }
 
@@ -360,7 +391,7 @@ func (m *Manager) interrupted() bool {
 }
 
 // sleepInterruptible は d だけ待つ。途中で停止/終了の要求が来たらすぐに false を返す。
-// 再送前の待機や一時停止中の待機（数秒）で、ボタンへの反応が遅れないようにするため。
+// 再送前の待機や一時停止中の待機（数秒）で、finish / stop への反応が遅れないようにするため。
 func (m *Manager) sleepInterruptible(d time.Duration) bool {
 	const step = 100 * time.Millisecond
 	deadline := time.Now().Add(d)
@@ -381,11 +412,20 @@ func (m *Manager) setStatus(status, msg string) {
 	m.status = status
 	m.message = msg
 	m.mu.Unlock()
+	m.emitState()
 }
 
 func (m *Manager) setMessage(msg string) {
 	m.mu.Lock()
 	m.message = msg
+	m.mu.Unlock()
+	m.emitState()
+}
+
+// setEndReason は終わり方を記録する。直後の setStatus 等で OnState に載せるため、ここでは通知しない。
+func (m *Manager) setEndReason(r EndReason) {
+	m.mu.Lock()
+	m.endReason = r
 	m.mu.Unlock()
 }
 
@@ -395,7 +435,9 @@ func (m *Manager) setErrorState(errMsg string) {
 	m.status = StatusError
 	m.err = errMsg
 	m.message = "エラー: " + errMsg
+	m.endReason = EndError
 	m.mu.Unlock()
+	m.emitState()
 	m.addLog("error", "❌ エラー: "+errMsg)
 }
 
@@ -406,7 +448,14 @@ func (m *Manager) runWorker(s Settings) {
 	defer func() {
 		m.mu.Lock()
 		m.isRunning = false
+		done := m.done
 		m.mu.Unlock()
+		// IsRunning=false の最終状態を通知してから Wait を解放する。逆順にすると、
+		// Wait から戻った CLI が最終状態を受け取る前に後片付けを始めてしまう。
+		m.emitState()
+		if done != nil {
+			close(done)
+		}
 	}()
 
 	m.addLog("info", fmt.Sprintf("「%s」のキャプチャを開始しました", s.BookName))
@@ -428,6 +477,7 @@ func (m *Manager) runWorker(s Settings) {
 	m.mu.Lock()
 	m.outputDir = outDir
 	m.mu.Unlock()
+	m.emitState() // CLI はここで初めて出力フォルダ（run.jsonl・status.json の置き場所）を知る
 
 	// Kindle のウィンドウを自動検出する。前面化は一切しない（前面化はキーボード
 	// フォーカスを奪い、「メインで作業しながら取り込む」という目的そのものを壊す）。
@@ -466,6 +516,7 @@ func (m *Manager) runWorker(s Settings) {
 	}
 
 	if m.interrupted() {
+		m.setEndReason(EndInterrupted)
 		m.setStatus(StatusIdle, "中断されました")
 		m.addLog("info", "中断されました")
 		return
@@ -485,17 +536,18 @@ func (m *Manager) runCapture(drv kindleDriver, outDir string, s Settings) {
 
 	m.mu.Lock()
 	m.totalPages = captured
-	stopped := m.shouldStop && !m.shouldFinish // 両方押されたら「終了してPDF作成」を優先する
-	// 一時停止中に「終了してPDF作成」「停止」が押された、または一時停止が時間切れになった
+	stopped := m.shouldStop && !m.shouldFinish // 両方要求されたら finish（完了扱い）を優先する
+	// 一時停止中に finish / stop を要求された、または一時停止が時間切れになった
 	// 場合、captureLoop は status を StatusPaused のまま返す。このまま finalize（余白検出・
-	// PDF結合。数百ページなら1分近くかかる）に入ると、その間 UI が「一時停止」バッジと
-	// 「終了してPDF作成」ボタンを出し続け、要求が効いていないように見える。
+	// PDF結合。数百ページなら1分近くかかる）に入ると、その間ずっと「一時停止」の状態が
+	// 出続け、要求が効いていないように見える（Claude が finish を送り直してしまう）。
 	// 撮影は終わっているので、PDF 作成の間は実行中に戻す（エラーの経路は直後の
 	// setErrorState が上書きする）。
 	if m.status == StatusPaused {
 		m.status = StatusRunning
 	}
 	m.mu.Unlock()
+	m.emitState()
 
 	switch {
 	case loopErr != nil:
@@ -514,6 +566,7 @@ func (m *Manager) runCapture(drv kindleDriver, outDir string, s Settings) {
 
 	case end == endInterrupted && stopped:
 		if captured == 0 {
+			m.setEndReason(EndInterrupted)
 			m.setStatus(StatusIdle, "中断されました")
 			m.addLog("info", "中断されました")
 			return
@@ -524,6 +577,7 @@ func (m *Manager) runCapture(drv kindleDriver, outDir string, s Settings) {
 			return
 		}
 		msg := fmt.Sprintf("中断されました（%dページまで保存）。%s", captured, summary)
+		m.setEndReason(EndInterrupted)
 		m.setStatus(StatusIdle, msg)
 		m.addLog("info", msg)
 
@@ -538,9 +592,12 @@ func (m *Manager) runCapture(drv kindleDriver, outDir string, s Settings) {
 			return
 		}
 		msg := "完了！" + summary
+		reason := EndDone
 		if end == endPauseTimeout {
 			msg = fmt.Sprintf("最終ページか確認できないまま終了しました（%d ページ）。%s", captured, summary)
+			reason = EndPauseTimeout
 		}
+		m.setEndReason(reason)
 		m.setStatus(StatusDone, msg)
 		m.addLog("success", "✅ 完了: "+outDir)
 	}
@@ -565,6 +622,14 @@ func (m *Manager) finalize(outDir string, s Settings) (string, error) {
 	if len(res.Files) == 0 {
 		return "", errors.New("PDF作成に失敗しました")
 	}
+	// CLI が結果（作った PDF の一覧）を返せるよう状態に残す。エラー・中断の経路でも
+	// finalize は通るので、ここで記録すれば「撮れたページの PDF」も漏れなく載る。
+	m.mu.Lock()
+	m.pdfFiles = slices.Clone(res.Files)
+	if res.Cropped {
+		m.cropRect = res.CropRect
+	}
+	m.mu.Unlock()
 
 	if s.AutoCrop {
 		if res.Cropped {
@@ -579,7 +644,7 @@ func (m *Manager) finalize(outDir string, s Settings) (string, error) {
 	}
 
 	summary := fmt.Sprintf("%d個のPDFを作成しました", len(res.Files))
-	if s.AutoDeletePNG {
+	if s.AutoDeletePNG && !s.DeferPNGDelete {
 		m.setMessage("PNGファイル削除中...")
 		deletedCount, _ := pdf.DeletePNGs(outDir)
 		summary = fmt.Sprintf("%d個のPDFを作成し、%d個のPNGを削除しました", len(res.Files), deletedCount)

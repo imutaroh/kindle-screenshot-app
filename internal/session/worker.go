@@ -24,7 +24,7 @@ import (
 const pollFileName = "poll.png"
 
 // pausedMessage は一時停止中に画面に出す案内文。
-const pausedMessage = "ページが進みません。Kindle の本文を1回クリックしてください（キー受付の復旧）。本の最後なら『終了してPDF作成』を押してください"
+const pausedMessage = "ページが進みません。Kindle の本文を1回クリックしてください（キー受付の復旧）。本の最後なら kindlesnap finish で終了してPDF作成してください"
 
 // kindleDriver は撮影ループが使う Kindle 操作。*capture.Kindle が実装する。
 // ユニットテストで偽物（ページ送りに反応しない Kindle など）に差し替えるためのインタフェース。
@@ -67,7 +67,7 @@ const (
 // Kindle は起動直後やマウスが乗った後にバックグラウンドのキーを受け付けなくなることがあり、
 // その状態も「同じ画面が続く」ため、本の途中で正常終了してしまっていた（途中停止の主因）。
 // 画面だけでは最終ページとキー不感を区別できないので、ページが進まないときは自動終了せず
-// 再送 → 一時停止（ユーザーに本文クリックか「終了してPDF作成」を求める）に進む
+// 再送 → 一時停止（ユーザーに本文クリックか kindlesnap finish（終了してPDF作成）を求める）に進む
 // （recoverUnchanged）。最終ページの判断はユーザーに委ねる。
 //
 // 戻り値:
@@ -139,6 +139,7 @@ func (m *Manager) captureLoop(drv kindleDriver, outDir string, maxPages int, dir
 		m.currentPage = page
 		m.message = fmt.Sprintf("ページ %d を保存中...", page)
 		m.mu.Unlock()
+		m.emitState()
 		m.addLog("info", fmt.Sprintf("ページ %d を保存", page))
 
 		if page == 1 {
@@ -394,8 +395,8 @@ func (m *Manager) recoverUnchanged(drv kindleDriver, poll string, prev frame.Fra
 // timedOut=true を返す。
 func (m *Manager) pauseUntilChanged(drv kindleDriver, poll string, prev frame.Frame, page int, direction capture.Direction) (res settleResult, cur frame.Frame, timedOut bool, err error) {
 	m.setStatus(StatusPaused, pausedMessage)
-	m.addLog("error", fmt.Sprintf("⏸️ 一時停止: ページ %d に進めません（%dページまで保存済み）。Kindle の本文を1回クリックすると自動で再開します。本の最後なら『終了してPDF作成』を押してください", page, page-1))
-	m.notify("PageSnap", "ページが進みません。Kindle の本文を1回クリックしてください。本の最後なら「終了してPDF作成」を押してください")
+	m.addLog("error", fmt.Sprintf("⏸️ 一時停止: ページ %d に進めません（%dページまで保存済み）。Kindle の本文を1回クリックすると自動で再開します。本の最後なら kindlesnap finish で終了してPDF作成してください", page, page-1))
+	m.notify("kindlesnap", "ページが進みません。Kindle の本文を1回クリックしてください。本の最後なら kindlesnap finish で終了してPDF作成してください")
 
 	pausedAt := time.Now()
 	lastKey := time.Now() // 直前の再送からの間隔も DefaultPausedKeyInterval 空ける
@@ -478,6 +479,7 @@ func (m *Manager) reportResolution(drv kindleDriver, path string) {
 	m.mu.Lock()
 	m.resolution = res
 	m.mu.Unlock()
+	m.emitState()
 	m.addLog("info", "解像度: "+res)
 
 	if pt := drv.WindowWidth(); pt > 0 && float64(w)/pt < lowResScale {

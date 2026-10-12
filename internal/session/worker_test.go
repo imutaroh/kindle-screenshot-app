@@ -646,8 +646,8 @@ func TestFinishAndStop_NotRunning(t *testing.T) {
 }
 
 // TestRunCapture_NotPausedDuringFinalize は、一時停止から抜けた後の PDF 作成（余白検出・
-// PDF結合）の間、status が StatusPaused のまま残らないことを確かめる。残ると UI が
-// 「一時停止」バッジと「終了してPDF作成」ボタンを出し続け、要求が効いていないように見える。
+// PDF結合）の間、status が StatusPaused のまま残らないことを確かめる。残ると「一時停止」の
+// 状態が出続け、finish / stop の要求が効いていないように見える。
 func TestRunCapture_NotPausedDuringFinalize(t *testing.T) {
 	for _, tt := range []struct {
 		name string

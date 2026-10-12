@@ -2,6 +2,7 @@ package capture
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -13,6 +14,39 @@ func TestParseWindowList(t *testing.T) {
 		}
 		if len(wins) != 1 || wins[0].Owner != "Kindle" {
 			t.Fatalf("unexpected result: %+v", wins)
+		}
+	})
+
+	t.Run("onscreenを読む", func(t *testing.T) {
+		wins, err := parseWindowList(`[
+			{"owner":"Kindle","pid":100,"windowID":1,"layer":0,"onscreen":true,"x":10,"y":-20,"width":1470,"height":923},
+			{"owner":"Kindle","pid":100,"windowID":2,"layer":0,"onscreen":false,"x":0,"y":0,"width":1470,"height":33}
+		]`)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !wins[0].OnScreen || wins[1].OnScreen {
+			t.Errorf("OnScreen = %v, %v, want true, false", wins[0].OnScreen, wins[1].OnScreen)
+		}
+		if wins[0].X != 10 || wins[0].Y != -20 {
+			t.Errorf("位置 = (%g, %g), want (10, -20)", wins[0].X, wins[0].Y)
+		}
+	})
+
+	t.Run("onscreenが無ければfalse", func(t *testing.T) {
+		// 旧スクリプトの出力（onscreen フィールドなし）も読める
+		wins, err := parseWindowList(`[{"owner":"Kindle","pid":100,"windowID":1,"layer":0,"x":0,"y":0,"width":1470,"height":923}]`)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if wins[0].OnScreen {
+			t.Error("onscreen が無いのに OnScreen=true になった")
+		}
+	})
+
+	t.Run("スクリプトがonscreenを出力する", func(t *testing.T) {
+		if !strings.Contains(windowListScript, "onscreen: !!w.kCGWindowIsOnscreen") {
+			t.Error("windowListScript が onscreen を出力していない")
 		}
 	})
 
@@ -62,6 +96,18 @@ func TestSelectKindleWindow(t *testing.T) {
 		}
 		if got.WindowID != 2 {
 			t.Fatalf("expected windowID=2 (最小), got %+v", got)
+		}
+	})
+
+	t.Run("画面外のウィンドウも選ぶ", func(t *testing.T) {
+		// 別 Space にある通常ウィンドウも screencapture -l で撮れるので、OnScreen では絞らない
+		wins := []WindowInfo{
+			{Owner: "Kindle", PID: 100, WindowID: 1, Layer: 0, OnScreen: true, Width: 1470, Height: 33},
+			{Owner: "Kindle", PID: 100, WindowID: 2, Layer: 0, OnScreen: false, Width: 1470, Height: 923},
+		}
+		got, ok := selectKindleWindow(wins)
+		if !ok || got.WindowID != 2 {
+			t.Fatalf("expected windowID=2 (画面外の本体), got %+v ok=%v", got, ok)
 		}
 	})
 
