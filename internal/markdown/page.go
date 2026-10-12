@@ -6,6 +6,8 @@
 //
 //  1. 上端・下端の帯に収まる柱（書名・ウィンドウタイトル「Kindle」・ページ番号）を捨てる。
 //     縦書きページでは帯の中の横書き段落、横書きページでは帯の中の短い段落が対象。
+//     縦書きの本の図だけのページ（横書きページと判定される）で長い書名の柱が残らないよう、
+//     本の縦書きページで見つけた柱と似た段落も捨てる（book.go の bookRunningHeads）。
 //  2. ルビを捨てる: 本文より細いひらがなだけの縦書き段落で、すぐ左に漢字を含む
 //     縦書き段落が縦方向に重なって並んでいるもの。
 //  3. 縦書きページの横書き段落・箇条書き・表（図や表の中の文字）は、本文の流れを
@@ -34,6 +36,10 @@ const (
 	// 横書きページでは本文も柱も同じ向きなので、向きでは区別できない。帯に収まる
 	// 短い段落（書名・章名・ページ番号）だけを柱とし、長い段落は念のため本文に残す。
 	runningHeadMaxChars = 30
+	// runningHeadSimilarity は、帯の中の段落を本の柱（縦書きページで見つけた柱）と同じとみなす
+	// 類似度（2×最長共通部分列の長さ ÷ 2つの文字数の和）の下限。柱は毎ページ同じ文字列だが、
+	// 小さい文字なので OCR が数文字を読み違える（「組織」→「組版」など）ため、完全一致では拾えない。
+	runningHeadSimilarity = 0.8
 
 	// rubyWidthRatio: ルビの列幅は本文の列幅（縦書き行の幅の中央値）のおよそ半分。
 	// 0.7 未満を「本文より明らかに細い」とみなす。
@@ -185,7 +191,10 @@ func medianTTBLineWidth(p ocr.Page) float64 {
 //   - 横書きページ: runningHeadMaxChars 文字以下の短い段落（書名・章名・ページ番号）。
 //     これを捨てないと、横書きの本では毎ページ柱が本文に混ざり、しかもページの最初と
 //     最後のブロックが柱になるので、ページをまたぐ段落の連結も一切効かなくなる
-func isRunningHead(para ocr.Paragraph, vertical bool) bool {
+//   - 本の柱 knownHeads（縦書きページで見つけた柱）と似た段落: ページの向きに関係なく捨てる。
+//     縦書きの本でも図だけのページは横書きページと判定されるので、長い書名の柱が
+//     runningHeadMaxChars を超えて本文（しかも見出し）に残ってしまうのを防ぐ
+func isRunningHead(para ocr.Paragraph, vertical bool, knownHeads []string) bool {
 	if !inEdgeBand(para) {
 		return false
 	}
@@ -195,7 +204,58 @@ func isRunningHead(para ocr.Paragraph, vertical bool) bool {
 	if vertical {
 		return !isTTB(para)
 	}
-	return countChars(para.Text) <= runningHeadMaxChars
+	if countChars(para.Text) <= runningHeadMaxChars {
+		return true
+	}
+	return matchesKnownHead(para.Text, knownHeads)
+}
+
+// matchesKnownHead は s が knownHeads のどれかと runningHeadSimilarity 以上に似ているかを返す。
+func matchesKnownHead(s string, knownHeads []string) bool {
+	a := []rune(compactText(s))
+	if len(a) == 0 {
+		return false
+	}
+	for _, h := range knownHeads {
+		b := []rune(h)
+		if len(b) == 0 {
+			continue
+		}
+		if float64(2*lcsLen(a, b))/float64(len(a)+len(b)) >= runningHeadSimilarity {
+			return true
+		}
+	}
+	return false
+}
+
+// compactText は空白を除いた文字列（柱の比較用）。
+func compactText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// lcsLen は a と b の最長共通部分列の長さ。柱は数十文字なので O(len(a)×len(b)) で足りる。
+func lcsLen(a, b []rune) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			switch {
+			case a[i-1] == b[j-1]:
+				cur[j] = prev[j-1] + 1
+			case prev[j] >= cur[j-1]:
+				cur[j] = prev[j]
+			default:
+				cur[j] = cur[j-1]
+			}
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
 }
 
 // isRuby は規則2（ルビ）に当たるかを返す。
@@ -263,13 +323,18 @@ func renderTable(t ocr.Table) string {
 
 // layoutPage は1ページに4つの後処理を適用し、Markdown のブロック列にする。
 func layoutPage(p ocr.Page) pageLayout {
+	return layoutPageWithHeads(p, nil)
+}
+
+// layoutPageWithHeads は layoutPage に、本の柱 knownHeads（bookRunningHeads）を渡して柱の判定に使う版。
+func layoutPageWithHeads(p ocr.Page, knownHeads []string) pageLayout {
 	vertical := isVerticalPage(p)
 	medW := medianTTBLineWidth(p)
 
 	// 柱とルビを先に除いておく（見出しの「一番右」判定や段落連結の判定に混ぜないため）
 	var kept []ocr.Paragraph
 	for _, para := range p.Paragraphs {
-		if !hasLetter(para.Text) || isRunningHead(para, vertical) || isRuby(para, p.Paragraphs, medW) {
+		if !hasLetter(para.Text) || isRunningHead(para, vertical, knownHeads) || isRuby(para, p.Paragraphs, medW) {
 			continue
 		}
 		kept = append(kept, para)

@@ -425,3 +425,64 @@ func TestListPagesNumericOrder(t *testing.T) {
 		t.Error("空のフォルダでエラーにならない")
 	}
 }
+
+// ttbPara は縦書きの段落を合成する（1列）。
+func ttbPara(text string, x, y, h float64) ocr.Paragraph {
+	r := ocr.Rect{x, y, 0.02, h}
+	return ocr.Paragraph{Text: text, BBox: r, Direction: ocr.DirTTB, Confidence: 0.4,
+		Lines: []ocr.Line{{Text: text, BBox: r, Direction: ocr.DirTTB, Confidence: 0.4}}}
+}
+
+// 縦書きの本の図だけのページ: 図の横書きラベルで横書きページと判定されても、
+// 縦書きページで見つけた長い柱（30文字超）と似た段落は柱として捨てる。
+// OCR が柱を毎回少しずつ読み違えても（2文字違い）同じ柱とみなす。
+func TestBuildDropsLongRunningHeadOnFigurePage(t *testing.T) {
+	const head = "サンプルの長い書名をここに置く――副題もつけて三十文字を超える柱の例"
+	const misread = "サンプルの長い書名をここに買く――副題もつけて三十文学を超える柱の例"
+	text := ocr.Page{Width: 1146, Height: 1410, Paragraphs: []ocr.Paragraph{
+		ltrPara(head, [3]float64{0.3, 0.04, 0.4}),
+		ttbPara("本文の一列目です。", 0.8, 0.1, 0.8),
+		ttbPara("本文の二列目です。", 0.7, 0.1, 0.8),
+	}}
+	figure := ocr.Page{Width: 1146, Height: 1410, Paragraphs: []ocr.Paragraph{
+		ltrPara(misread, [3]float64{0.3, 0.04, 0.4}),
+		ltrPara("図のタイトル", [3]float64{0.3, 0.35, 0.4}),
+		ltrPara("図のラベルその一", [3]float64{0.2, 0.5, 0.3}),
+		// 柱と似ていない長い段落は、帯の中でも本文に残す
+		ltrPara("帯の中にあるが柱とは似ていない長い文章で三十文字をこえているもの", [3]float64{0.1, 0.94, 0.8}),
+	}}
+	if isVerticalPage(figure) {
+		t.Fatal("図のページは横書きページと判定される前提")
+	}
+
+	md, _ := Build("", []BookPage{{Number: 1, OCR: text}, {Number: 2, OCR: figure}})
+	if strings.Contains(md, "サンプルの長い書名") {
+		t.Errorf("柱が残っている:\n%s", md)
+	}
+	for _, want := range []string{"図のタイトル", "図のラベルその一", "柱とは似ていない"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("%q が消えた:\n%s", want, md)
+		}
+	}
+}
+
+func TestMatchesKnownHead(t *testing.T) {
+	heads := []string{"冒頭の書名と副題からなる長い柱"}
+	for _, tt := range []struct {
+		s    string
+		want bool
+	}{
+		{"冒頭の書名と副題からなる長い柱", true},
+		{"冒頭の書名と副題から なる長い柱", true}, // 空白は無視
+		{"冒頭の書名と副題からなる長い枝", true}, // 1文字違い
+		{"まったく別の本文の一文です。", false},
+		{"", false},
+	} {
+		if got := matchesKnownHead(tt.s, heads); got != tt.want {
+			t.Errorf("matchesKnownHead(%q) = %v, want %v", tt.s, got, tt.want)
+		}
+	}
+	if matchesKnownHead("何か", nil) {
+		t.Error("柱が無いのに一致した")
+	}
+}

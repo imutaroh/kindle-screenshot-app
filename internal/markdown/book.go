@@ -82,11 +82,12 @@ func Build(title string, pages []BookPage) (md string, reviewPages []int) {
 		pendingBody = -1
 	}
 
+	heads := bookRunningHeads(pages)
 	for _, bp := range pages {
 		if bp.OCR.Error != "" {
 			reviewPages = append(reviewPages, bp.Number)
 		}
-		layout := layoutPage(bp.OCR)
+		layout := layoutPageWithHeads(bp.OCR, heads)
 		if bp.OCR.Error == "" && !layout.hasText() && !bp.Blank {
 			reviewPages = append(reviewPages, bp.Number)
 		} else if layout.hasText() && layout.meanConfidence < ReviewConfidence {
@@ -123,6 +124,30 @@ func Build(title string, pages []BookPage) (md string, reviewPages []int) {
 	}
 	flush()
 	return strings.TrimRight(sb.String(), "\n") + "\n", reviewPages
+}
+
+// bookRunningHeads は本の柱の文字列（空白を除く）を集める。縦書きページの上端・下端の帯にある
+// 横書き段落は確実に柱なので、その文字列を覚えておき、横書きページと判定された図だけのページで
+// 同じ柱を見分けるのに使う（isRunningHead）。runningHeadMaxChars 以下の短い柱はもともと捨てられるので集めない。
+func bookRunningHeads(pages []BookPage) []string {
+	seen := map[string]bool{}
+	var heads []string
+	for _, bp := range pages {
+		if bp.OCR.Error != "" || !isVerticalPage(bp.OCR) {
+			continue
+		}
+		for _, para := range bp.OCR.Paragraphs {
+			if !inEdgeBand(para) || isTTB(para) || countChars(para.Text) <= runningHeadMaxChars {
+				continue
+			}
+			h := compactText(para.Text)
+			if !seen[h] {
+				seen[h] = true
+				heads = append(heads, h)
+			}
+		}
+	}
+	return heads
 }
 
 // lastBodyIndex は blocks の中で最後の本文ブロックの位置を返す（無ければ -1）。
