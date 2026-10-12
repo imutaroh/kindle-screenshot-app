@@ -11,6 +11,7 @@
 //	kindlesnap md --dir BOOKDIR        page_*.png から Markdown を作り直す
 //	kindlesnap peek [--out FILE]       Kindle のウィンドウを PNG に撮る
 //	kindlesnap click --x X --y Y       Kindle のウィンドウ内をクリックする
+//	kindlesnap park                    マウスを Kindle のウィンドウの外へ動かす
 package main
 
 import (
@@ -42,6 +43,7 @@ const usageText = `使い方: kindlesnap <サブコマンド> [オプション]
   md --dir BOOKDIR            page_*.png から Markdown を作り直す
   peek [--out FILE]           Kindle のウィンドウを PNG に撮る
   click --x X --y Y [--double]  Kindle のウィンドウ内の座標（ポイント）をクリックする
+  park                        マウスを Kindle のウィンドウの外へ動かす（capture の前に）
 
 各サブコマンドのオプションは kindlesnap <サブコマンド> -h で表示します。
 `
@@ -75,6 +77,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdPeek(rest, stdout, stderr)
 	case "click":
 		return cmdClick(rest, stdout, stderr)
+	case "park":
+		return cmdPark(rest, stdout, stderr)
 	case "-h", "-help", "--help", "help":
 		fmt.Fprint(stdout, usageText)
 		return exitOK

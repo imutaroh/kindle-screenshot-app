@@ -5,7 +5,7 @@ Kindle for Mac で開いている本を1ページずつ撮影し、**PDF** と *
 
 主な使い手は Claude Code。リポジトリのプロジェクトスキル `kindle-to-md`
 （`.claude/skills/kindle-to-md/SKILL.md`）に手順があり、Claude Code に「Kindle の本を PDF と Markdown にして」と
-頼むと、事前チェック → 撮影 → 結果の報告 までを進める。人が直接コマンドを打ってもよい。
+頼むと、事前チェック → 本を選んで開始ページを開く（画面を見てクリック）→ 撮影 → 結果の報告 までを進める。人が直接コマンドを打ってもよい。
 
 > 出力は本人の私的利用に限る。PDF・Markdown を共有・公開しない。
 
@@ -54,6 +54,7 @@ go build -o kindlesnap ./cmd/kindlesnap
 | `kindlesnap md --dir BOOKDIR [--title T]` | フォルダの `page_*.png` から Markdown を作り直す |
 | `kindlesnap peek [--out FILE]` | Kindle のウィンドウを PNG に撮る（Claude が画面を見るため） |
 | `kindlesnap click --x X --y Y [--double]` | Kindle のウィンドウ内（左上からのポイント座標）をクリックする。本物のマウスが動く。他のウィンドウが Kindle に重なっているとそちらをクリックするので、Kindle を前面に出してから使う（peek の画像には重なりが写らない） |
+| `kindlesnap park` | マウスカーソルを Kindle のウィンドウの外（画面上）へ動かす。click で本を開いた後、capture の前に使う（カーソルが乗っているとページ送りの矢印が写り込む）。本物のマウスが動く |
 
 `capture` のオプション:
 

@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -153,4 +154,129 @@ func Click(x, y float64, double bool) error {
 		return fmt.Errorf("クリックに失敗しました: %s", out)
 	}
 	return nil
+}
+
+// Rect はグローバル座標（ポイント単位。左上が原点で y は下向き。CGWindowBounds と同じ座標系）の矩形。
+type Rect struct {
+	X, Y, W, H float64
+}
+
+// contains は点 (x, y) が矩形の内側（端を含む）にあるか。
+func (r Rect) contains(x, y float64) bool {
+	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
+}
+
+// parkMargin はマウスを逃がすとき、Kindle のウィンドウの縁から離す距離（ポイント）。
+const parkMargin = 40
+
+// parkPoint は、Kindle のウィンドウ win の外で、どれかの画面 screens の上にある点を選ぶ。
+// ウィンドウの右・左・下・上の順に、縁から parkMargin 離れた点を試す。
+// どれも画面の外（ウィンドウが画面いっぱい）なら、ウィンドウに掛からない画面の隅を探す。
+// 見つからなければ ok=false（全画面がウィンドウに覆われている）。
+//
+// 画面の上にない点へ動かすと、macOS はカーソルを最寄りの画面の縁へ寄せてしまい、
+// ウィンドウの縁の上に乗って矢印が出ることがあるので、必ず画面内の点を選ぶ。
+func parkPoint(win Rect, screens []Rect) (x, y float64, ok bool) {
+	midX, midY := win.X+win.W/2, win.Y+win.H/2
+	candidates := [][2]float64{
+		{win.X + win.W + parkMargin, midY}, // 右
+		{win.X - parkMargin, midY},         // 左
+		{midX, win.Y + win.H + parkMargin}, // 下
+		{midX, win.Y - parkMargin},         // 上
+	}
+	for _, s := range screens {
+		const inset = 5
+		candidates = append(candidates,
+			[2]float64{s.X + s.W - inset, s.Y + s.H - inset}, // 右下の隅
+			[2]float64{s.X + inset, s.Y + s.H - inset},       // 左下の隅
+		)
+	}
+	for _, c := range candidates {
+		if win.contains(c[0], c[1]) {
+			continue
+		}
+		for _, s := range screens {
+			if s.contains(c[0], c[1]) {
+				return c[0], c[1], true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// screensScript は全画面の矩形を JSON（[{x,y,w,h},...]）で返す JXA。
+// NSScreen の frame は左下原点（y は上向き）なので、主画面（screens[0]）の高さを使って
+// CG のグローバル座標（左上原点・y は下向き）に変換する。
+const screensScript = `
+ObjC.import("AppKit");
+function run() {
+	const ss = $.NSScreen.screens;
+	const n = ss.count;
+	if (n === 0) {
+		return "[]";
+	}
+	const mainH = ss.objectAtIndex(0).frame.size.height;
+	const out = [];
+	for (let i = 0; i < n; i++) {
+		const f = ss.objectAtIndex(i).frame;
+		out.push({x: f.origin.x, y: mainH - (f.origin.y + f.size.height), w: f.size.width, h: f.size.height});
+	}
+	return JSON.stringify(out);
+}
+`
+
+// Screens は接続されている全画面の矩形（グローバル座標・ポイント単位）を返す。
+func Screens() ([]Rect, error) {
+	out, err := runJXA(screensScript)
+	if err != nil {
+		return nil, fmt.Errorf("画面の一覧を取得できません: %w", err)
+	}
+	var raw []struct{ X, Y, W, H float64 }
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		return nil, fmt.Errorf("画面の一覧を解釈できません（%q）: %w", out, err)
+	}
+	rs := make([]Rect, len(raw))
+	for i, r := range raw {
+		rs[i] = Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}
+	}
+	return rs, nil
+}
+
+// moveScript はマウスカーソルをグローバル座標 (x, y) へ動かす JXA（クリックはしない）。
+// 修飾キーのフラグを 0 にする理由と数値定数は clickScript と同じ。
+func moveScript(x, y float64) string {
+	return fmt.Sprintf(`
+ObjC.import("CoreGraphics");
+function run() {
+	const ev = $.CGEventCreateMouseEvent($(), 5, {x: %s, y: %s}, 0);
+	if (!ev) {
+		return "error: CGEventCreateMouseEvent が失敗しました";
+	}
+	$.CGEventSetFlags(ev, 0);
+	$.CGEventPost(0, ev);
+	return "ok";
+}
+`, formatCoord(x), formatCoord(y))
+}
+
+// ParkMouse はマウスカーソルを Kindle のウィンドウ win の外（画面上）へ動かし、動かした先を返す。
+// カーソルがウィンドウに乗っているとページ送りの矢印が表示されて写り込み、キー受付が止まる
+// 原因にもなるので、click で本を開いた後・capture の前に使う。本物のマウスカーソルが動く。
+func ParkMouse(win Rect) (x, y float64, err error) {
+	screens, err := Screens()
+	if err != nil {
+		return 0, 0, err
+	}
+	x, y, ok := parkPoint(win, screens)
+	if !ok {
+		return 0, 0, errors.New("Kindle のウィンドウの外に、マウスを置ける画面上の場所がありません（ウィンドウを小さくしてください）")
+	}
+	out, err := runJXA(moveScript(x, y))
+	if err != nil {
+		return 0, 0, fmt.Errorf("マウスを動かせませんでした（システム設定 > プライバシーとセキュリティ > アクセシビリティ を確認）: %w", err)
+	}
+	if out != "ok" {
+		return 0, 0, fmt.Errorf("マウスを動かせませんでした: %s", out)
+	}
+	return x, y, nil
 }

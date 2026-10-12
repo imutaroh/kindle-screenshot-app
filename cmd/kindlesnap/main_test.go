@@ -97,6 +97,7 @@ func TestRun_Usage(t *testing.T) {
 		{"md に --dir が無い", []string{"md"}, exitUsage},
 		{"click に座標が無い", []string{"click", "--x", "10"}, exitUsage},
 		{"status に余分な引数", []string{"status", "extra"}, exitUsage},
+		{"park に余分な引数", []string{"park", "extra"}, exitUsage},
 		{"-h は成功", []string{"doctor", "-h"}, exitOK},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -138,3 +138,34 @@ func cmdClick(args []string, stdout, stderr io.Writer) int {
 	writeJSON(stdout, clickOutput{OK: true, X: *x, Y: *y, Global: g, Double: *double, Window: rectOf(win)})
 	return exitOK
 }
+
+// parkOutput は kindlesnap park の出力。
+type parkOutput struct {
+	OK     bool       `json:"ok"`
+	Global point      `json:"global"` // マウスを動かした先のグローバル座標（ポイント）
+	Window windowRect `json:"window"`
+}
+
+// cmdPark は kindlesnap park。マウスカーソルを Kindle のウィンドウの外（画面上）へ動かす。
+// click で本を開いた後、capture の前に使う（カーソルが乗っているとページ送りの矢印が写り込む）。
+// 本物のマウスカーソルが動く。
+func cmdPark(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("park", stderr)
+	if code, ok := parseFlags(fs, args); !ok {
+		return code
+	}
+	if err := capture.CheckAccessibility(); err != nil {
+		return fail(stdout, err)
+	}
+	k := &capture.Kindle{}
+	if err := k.Discover(); err != nil {
+		return fail(stdout, err)
+	}
+	win := k.Info()
+	x, y, err := capture.ParkMouse(capture.Rect{X: win.X, Y: win.Y, W: win.Width, H: win.Height})
+	if err != nil {
+		return fail(stdout, err)
+	}
+	writeJSON(stdout, parkOutput{OK: true, Global: point{X: x, Y: y}, Window: rectOf(win)})
+	return exitOK
+}
