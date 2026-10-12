@@ -689,3 +689,17 @@ func TestToGlobal(t *testing.T) {
 		}
 	}
 }
+
+func TestOnAnyScreen(t *testing.T) {
+	screens := []capture.Rect{{X: 0, Y: 0, W: 3440, H: 1440}}
+	if !onAnyScreen(screens, point{X: 100, Y: 100}) {
+		t.Error("画面内の点が画面外と判定された")
+	}
+	// 実機で起きた状況: ウィンドウが下にはみ出し、ウィンドウ内の座標が画面の下の外を指した
+	if onAnyScreen(screens, point{X: 3082, Y: 1462}) {
+		t.Error("画面外の点が画面内と判定された")
+	}
+	if onAnyScreen(nil, point{X: 0, Y: 0}) {
+		t.Error("画面が無いのに画面内と判定された")
+	}
+}

@@ -132,6 +132,15 @@ func cmdClick(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stdout, err)
 	}
+	// ウィンドウが画面からはみ出していると、ウィンドウ内の座標でも画面の外を指すことがある。
+	// 画面外の点へのイベントは macOS が画面の縁へ寄せるので、Dock など別の物をクリックしてしまう
+	screens, err := capture.Screens()
+	if err != nil {
+		return fail(stdout, err)
+	}
+	if !onAnyScreen(screens, g) {
+		return fail(stdout, fmt.Errorf("クリック先 (%g, %g) が画面の外です。Kindle のウィンドウが画面からはみ出しています（ウィンドウ %gx%g @(%g,%g)）。ウィンドウ全体が画面に収まるように移動してください", g.X, g.Y, win.Width, win.Height, win.X, win.Y))
+	}
 	if err := capture.Click(g.X, g.Y, *double); err != nil {
 		return fail(stdout, err)
 	}
@@ -168,4 +177,14 @@ func cmdPark(args []string, stdout, stderr io.Writer) int {
 	}
 	writeJSON(stdout, parkOutput{OK: true, Global: point{X: x, Y: y}, Window: rectOf(win)})
 	return exitOK
+}
+
+// onAnyScreen は点 p がどれかの画面の上にあるか。
+func onAnyScreen(screens []capture.Rect, p point) bool {
+	for _, s := range screens {
+		if s.Contains(p.X, p.Y) {
+			return true
+		}
+	}
+	return false
 }

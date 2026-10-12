@@ -89,7 +89,7 @@ func TestParkPoint(t *testing.T) {
 			if ok != tt.wantOK || x != tt.wantX || y != tt.wantY {
 				t.Errorf("parkPoint = (%v, %v, %v), want (%v, %v, %v)", x, y, ok, tt.wantX, tt.wantY, tt.wantOK)
 			}
-			if ok && tt.win.contains(x, y) {
+			if ok && tt.win.Contains(x, y) {
 				t.Errorf("選んだ点 (%v, %v) がウィンドウの内側です", x, y)
 			}
 		})

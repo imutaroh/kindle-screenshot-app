@@ -161,8 +161,8 @@ type Rect struct {
 	X, Y, W, H float64
 }
 
-// contains は点 (x, y) が矩形の内側（端を含む）にあるか。
-func (r Rect) contains(x, y float64) bool {
+// Contains は点 (x, y) が矩形の内側（端を含む）にあるか。
+func (r Rect) Contains(x, y float64) bool {
 	return x >= r.X && x <= r.X+r.W && y >= r.Y && y <= r.Y+r.H
 }
 
@@ -192,11 +192,11 @@ func parkPoint(win Rect, screens []Rect) (x, y float64, ok bool) {
 		)
 	}
 	for _, c := range candidates {
-		if win.contains(c[0], c[1]) {
+		if win.Contains(c[0], c[1]) {
 			continue
 		}
 		for _, s := range screens {
-			if s.contains(c[0], c[1]) {
+			if s.Contains(c[0], c[1]) {
 				return c[0], c[1], true
 			}
 		}
